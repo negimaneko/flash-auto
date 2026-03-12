@@ -2,54 +2,60 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 function normalizeLanguageValue(value, fallback = "ja") {
   const text = String(value ?? "").trim();
-  return text || fallback;
+  if (!text) return fallback;
+  // If it's already a known code, return as-is
+  if (LANGUAGES.some((lang) => lang.code === text)) return text;
+  // If it's a label (e.g. "日本語"), convert to code
+  const byLabel = LANGUAGES.find((lang) => lang.label === text);
+  if (byLabel) return byLabel.code;
+  return text;
 }
 
 const LANGUAGES = [
-  { code: "ja", label: "日本語" },
-  { code: "en", label: "英語" },
-  { code: "zh", label: "中国語" },
-  { code: "ko", label: "韓国語" },
-  { code: "fr", label: "フランス語" },
-  { code: "de", label: "ドイツ語" },
-  { code: "es", label: "スペイン語" },
-  { code: "it", label: "イタリア語" },
-  { code: "pt", label: "ポルトガル語" },
-  { code: "ru", label: "ロシア語" },
-  { code: "ar", label: "アラビア語" },
-  { code: "hi", label: "ヒンディー語" },
-  { code: "th", label: "タイ語" },
-  { code: "vi", label: "ベトナム語" },
-  { code: "id", label: "インドネシア語" },
-  { code: "ms", label: "マレー語" },
-  { code: "tl", label: "タガログ語" },
-  { code: "nl", label: "オランダ語" },
-  { code: "sv", label: "スウェーデン語" },
-  { code: "da", label: "デンマーク語" },
-  { code: "no", label: "ノルウェー語" },
-  { code: "fi", label: "フィンランド語" },
-  { code: "pl", label: "ポーランド語" },
-  { code: "cs", label: "チェコ語" },
-  { code: "hu", label: "ハンガリー語" },
-  { code: "ro", label: "ルーマニア語" },
-  { code: "uk", label: "ウクライナ語" },
-  { code: "el", label: "ギリシャ語" },
-  { code: "tr", label: "トルコ語" },
-  { code: "he", label: "ヘブライ語" },
-  { code: "fa", label: "ペルシャ語" },
-  { code: "bn", label: "ベンガル語" },
-  { code: "ta", label: "タミル語" },
-  { code: "te", label: "テルグ語" },
-  { code: "ur", label: "ウルドゥー語" },
-  { code: "sw", label: "スワヒリ語" },
-  { code: "my", label: "ミャンマー語" },
-  { code: "km", label: "クメール語" },
-  { code: "lo", label: "ラオ語" },
-  { code: "mn", label: "モンゴル語" },
-  { code: "ka", label: "ジョージア語" },
-  { code: "hy", label: "アルメニア語" },
-  { code: "la", label: "ラテン語" },
-  { code: "technical", label: "専門用語" },
+  { code: "en", label: "英語", native: "English" },
+  { code: "technical", label: "🔬 専門用語" },
+  { code: "zh", label: "中国語", native: "中文" },
+  { code: "ko", label: "韓国語", native: "한국어" },
+  { code: "fr", label: "フランス語", native: "Français" },
+  { code: "de", label: "ドイツ語", native: "Deutsch" },
+  { code: "es", label: "スペイン語", native: "Español" },
+  { code: "it", label: "イタリア語", native: "Italiano" },
+  { code: "pt", label: "ポルトガル語", native: "Português" },
+  { code: "ru", label: "ロシア語", native: "Русский" },
+  { code: "ar", label: "アラビア語", native: "العربية" },
+  { code: "hi", label: "ヒンディー語", native: "हिन्दी" },
+  { code: "th", label: "タイ語", native: "ไทย" },
+  { code: "vi", label: "ベトナム語", native: "Tiếng Việt" },
+  { code: "id", label: "インドネシア語", native: "Bahasa Indonesia" },
+  { code: "ms", label: "マレー語", native: "Bahasa Melayu" },
+  { code: "tl", label: "タガログ語", native: "Tagalog" },
+  { code: "nl", label: "オランダ語", native: "Nederlands" },
+  { code: "sv", label: "スウェーデン語", native: "Svenska" },
+  { code: "da", label: "デンマーク語", native: "Dansk" },
+  { code: "no", label: "ノルウェー語", native: "Norsk" },
+  { code: "fi", label: "フィンランド語", native: "Suomi" },
+  { code: "pl", label: "ポーランド語", native: "Polski" },
+  { code: "cs", label: "チェコ語", native: "Čeština" },
+  { code: "hu", label: "ハンガリー語", native: "Magyar" },
+  { code: "ro", label: "ルーマニア語", native: "Română" },
+  { code: "uk", label: "ウクライナ語", native: "Українська" },
+  { code: "el", label: "ギリシャ語", native: "Ελληνικά" },
+  { code: "tr", label: "トルコ語", native: "Türkçe" },
+  { code: "he", label: "ヘブライ語", native: "עברית" },
+  { code: "fa", label: "ペルシャ語", native: "فارسی" },
+  { code: "bn", label: "ベンガル語", native: "বাংলা" },
+  { code: "ta", label: "タミル語", native: "தமிழ்" },
+  { code: "te", label: "テルグ語", native: "తెలుగు" },
+  { code: "ur", label: "ウルドゥー語", native: "اردو" },
+  { code: "sw", label: "スワヒリ語", native: "Kiswahili" },
+  { code: "my", label: "ミャンマー語", native: "မြန်မာ" },
+  { code: "km", label: "クメール語", native: "ខ្មែរ" },
+  { code: "lo", label: "ラオ語", native: "ລາວ" },
+  { code: "mn", label: "モンゴル語", native: "Монгол" },
+  { code: "ka", label: "ジョージア語", native: "ქართული" },
+  { code: "hy", label: "アルメニア語", native: "Հայերეն" },
+  { code: "la", label: "ラテン語", native: "Latina" },
+  { code: "ja", label: "日本語", native: "日本語" },
 ];
 const getLangLabel = (code) => {
   const normalized = normalizeLanguageValue(code, "");
@@ -359,23 +365,19 @@ function RichTextEditor({ value, onChange, placeholder, style, disabled }) {
   );
 }
 
-function LanguageInput({ value, onChange, listId, placeholder = "例: 日本語、English、Français", includeSpecial = false }) {
-  const options = includeSpecial ? LANGUAGES : LANGUAGES.filter((lang) => lang.code !== "technical");
+function LanguageInput({ value, onChange, includeSpecial = false }) {
+  const filtered = includeSpecial ? LANGUAGES : LANGUAGES.filter((lang) => lang.code !== "technical");
+  const options = includeSpecial ? filtered : [filtered.find((l) => l.code === "ja"), ...filtered.filter((l) => l.code !== "ja")];
   return (
-    <>
-      <input
-        className="settings-select"
-        list={listId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-      <datalist id={listId}>
-        {options.map((lang) => (
-          <option key={lang.code} value={lang.label} label={lang.code} />
-        ))}
-      </datalist>
-    </>
+    <select
+      className="settings-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((lang) => (
+        <option key={lang.code} value={lang.code}>{lang.native ? `${lang.label}(${lang.native})` : lang.label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -561,9 +563,12 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
   return (
     <div className="page">
       <Navbar right={
-        <button className="nbtn primary" onClick={onNew}>手動作成</button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI生成</button>
+          <button className="nbtn primary" onClick={onNew}>手動作成</button>
+        </div>
       }/>
-      <div className="quizlet-shell">
+      <div className="app-shell">
         <AppSidebar
           active="home"
           onHome={()=>setFilter("all")}
@@ -576,17 +581,17 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
           <section className="dashboard-hero">
             <div className="section-kicker">学習ホーム</div>
             <h1 className="dashboard-title">自分の学習セットをまとめて管理</h1>
-            <p className="dashboard-copy">Quizletのように、セット一覧からすぐ学習モードへ入り、必要ならAIでカードを増やせる構成にしました。</p>
+            <p className="dashboard-copy">セット一覧からすぐ学習モードへ入り、必要ならAIでカードを増やせます。</p>
             <div className="launch-grid">
+              <button className="launch-card launch-card-ai launch-card-featured" onClick={onGenerate}>
+                <span className="launch-kicker">AIに任せる</span>
+                <strong>✨ AI作成</strong>
+                <span>テーマだけ決めて、カードのたたき台を一気に生成します。</span>
+              </button>
               <button className="launch-card launch-card-manual" onClick={onNew}>
                 <span className="launch-kicker">手動で始める</span>
                 <strong>手動作成</strong>
                 <span>自分で単語と定義を入力して、オリジナルのセットをすぐ作成します。</span>
-              </button>
-              <button className="launch-card launch-card-ai" onClick={onGenerate}>
-                <span className="launch-kicker">AIに任せる</span>
-                <strong>AI作成</strong>
-                <span>テーマだけ決めて、カードのたたき台を一気に生成します。</span>
               </button>
             </div>
             <div className="dashboard-actions">
@@ -618,7 +623,7 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
                 <p>{filter==="fav" ? "お気に入りのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}>AI作成</button>
+                    <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
                     <button className="nbtn primary" onClick={onNew}>手動作成</button>
                   </div>
                 )}
@@ -663,7 +668,7 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
         <div className="study-set-topline">
           <span className="study-set-type">{deck.isPublic ? "公開セット" : "マイセット"}</span>
           <div className="tile-fav-wrap">
-            <button className={"fav-btn study-fav-btn"+(deck.favorited?" fav-on":"")} onClick={onFav}>{deck.favorited ? "保存済み" : "保存"}</button>
+            <button className={"fav-btn study-fav-btn"+(deck.favorited?" fav-on":"")} onClick={onFav}><svg width="28" height="28" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></button>
             {(deck.favCount||0)>0 && <span className="fav-count">{deck.favCount}</span>}
           </div>
         </div>
@@ -694,8 +699,8 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
 // AI GENERATE VIEW
 function GenerateView({onSave,onBack,showToast}) {
   const [topic, setTopic] = useState("");
-  const [wordLang, setWordLang] = useState(toLanguageInputValue("technical"));
-  const [defLang, setDefLang] = useState(toLanguageInputValue("ja"));
+  const [wordLang, setWordLang] = useState("technical");
+  const [defLang, setDefLang] = useState("ja");
   const [detailLevel, setDetailLevel] = useState(2);
   const [generated, setGenerated] = useState(null);
   const [generatedCacheId, setGeneratedCacheId] = useState(null);
@@ -894,12 +899,12 @@ function GenerateView({onSave,onBack,showToast}) {
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label style={{ display: "grid", gap: 8 }}>
               <span>単語の言語</span>
-              <LanguageInput value={wordLang} onChange={setWordLang} listId="generate-word-language-options" includeSpecial />
+              <LanguageInput value={wordLang} onChange={setWordLang} includeSpecial />
             </label>
 
             <label style={{ display: "grid", gap: 8 }}>
               <span>定義の言語</span>
-              <LanguageInput value={defLang} onChange={setDefLang} listId="generate-definition-language-options" />
+              <LanguageInput value={defLang} onChange={setDefLang} />
             </label>
 
             <label style={{ display: "grid", gap: 8 }}>
@@ -1023,7 +1028,7 @@ function LibraryView({decks,onBack,onOpenDetail,onToggleFav}) {
     <div className="page">
       <Navbar right={<button className="nbtn ghost" onClick={onBack}>ホームへ戻る</button>} />
 
-      <div className="quizlet-shell">
+      <div className="app-shell">
         <AppSidebar
           active="library"
           onHome={onBack}
@@ -1206,7 +1211,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
         center={<div className="study-deck-title">学習セット</div>}
         right={(
           <div style={{ display:"flex", gap:8 }}>
-            <button className="nbtn" onClick={onToggleFav}>{deck.favorited ? "保存解除" : "保存"}</button>
+            <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></button>
             <button className="nbtn" onClick={onEdit}>デッキ編集</button>
             <button className="nbtn danger" onClick={onDelete}>削除</button>
           </div>
@@ -1344,13 +1349,14 @@ function CreateView({initial,onSave,onBack,showToast}) {
   const isEdit = !!initial;
   const [name,setName]=useState(initial?.name || "");
   const [isPublic,setIsPublic]=useState(initial?.isPublic ?? true);
-  const [wordLang,setWordLang]=useState(toLanguageInputValue(initial?.wordLang || "ja"));
-  const [defLang,setDefLang]=useState(toLanguageInputValue(initial?.defLang || "ja"));
+  const [wordLang,setWordLang]=useState(normalizeLanguageValue(initial?.wordLang, "en"));
+  const [defLang,setDefLang]=useState(normalizeLanguageValue(initial?.defLang, "ja"));
   const [detailLevel,setDetailLevel]=useState(initial?.detailLevel || 2);
   const [tags,setTags]=useState(initial?.tags || []);
   const [tagInput,setTagInput]=useState("");
   const [cards,setCards]=useState(initial?.cards?.length ? initial.cards : [{ id:uid(), word:"", definition:"" }]);
   const [generatingCardId,setGeneratingCardId]=useState(null);
+  const [autoAI,setAutoAI]=useState(true);
 
   const updateCard=(id,field,value)=>{
     setCards((prev)=>prev.map((card)=>card.id===id ? { ...card, [field]: value } : card));
@@ -1405,6 +1411,13 @@ function CreateView({initial,onSave,onBack,showToast}) {
     }
   };
 
+  const handleWordBlur = (cardId) => {
+    if (!autoAI) return;
+    const target = cards.find((card)=>card.id===cardId);
+    if (!target?.word.trim() || target.definition.trim()) return;
+    generateCardDefinition(cardId);
+  };
+
   const handleSave=()=>{
     if(!name.trim()){
       showToast("デッキ名を入力してください","err");
@@ -1442,32 +1455,34 @@ function CreateView({initial,onSave,onBack,showToast}) {
     <div className="page">
       <Navbar
         left={<button className="nbtn ghost" onClick={onBack}>戻る</button>}
-        center={<span className="nav-center-title">{isEdit ? "デッキ編集" : "デッキ作成"}</span>}
+        center={<span className="nav-center-title">{isEdit ? "単語帳を編集" : "単語帳を作成"}</span>}
         right={<button className="nbtn primary" onClick={handleSave}>保存</button>}
       />
 
       <div style={{ maxWidth:800, margin:"0 auto", padding:"36px 0 100px" }}>
-        <input className="create-name-input" placeholder="デッキ名" value={name} onChange={(e)=>setName(e.target.value)} />
+        <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} />
 
         <div className="settings-card">
-          <div style={{ display:"grid", gap:14 }}>
+          <div style={{ display:"grid", gap:14, gridTemplateColumns:"1fr 1fr" }}>
             <label style={{ display:"grid", gap:8 }}>
               <span className="settings-label">単語の言語</span>
-              <LanguageInput value={wordLang} onChange={setWordLang} listId="create-word-language-options" includeSpecial />
+              <LanguageInput value={wordLang} onChange={setWordLang} includeSpecial />
             </label>
 
             <label style={{ display:"grid", gap:8 }}>
               <span className="settings-label">定義の言語</span>
-              <LanguageInput value={defLang} onChange={setDefLang} listId="create-definition-language-options" />
+              <LanguageInput value={defLang} onChange={setDefLang} />
             </label>
+          </div>
 
-            {wordLang === "technical" && (
-              <div style={{ color: "var(--text3)", fontSize: 13 }}>
-                専門用語は、日本国内で一般的に使われている用語として扱います。
-              </div>
-            )}
+          {wordLang === "technical" && (
+            <div style={{ color: "var(--text3)", fontSize: 13, marginTop:8 }}>
+              専門用語は、日本国内で一般的に使われている用語として扱います。
+            </div>
+          )}
 
-            <label style={{ display:"grid", gap:8 }}>
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", alignItems:"end", marginTop:14 }}>
+            <label style={{ display:"grid", gap:8, flex:"0 0 auto", minWidth:140 }}>
               <span className="settings-label">説明の詳しさ</span>
               <select className="settings-select" value={detailLevel} onChange={(e)=>setDetailLevel(Number(e.target.value))}>
                 {DETAIL_LEVELS.map((level)=>(
@@ -1476,7 +1491,12 @@ function CreateView({initial,onSave,onBack,showToast}) {
               </select>
             </label>
 
-            <label style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <label style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:4 }}>
+              <input type="checkbox" checked={autoAI} onChange={(e)=>setAutoAI(e.target.checked)} />
+              <span className="settings-label">AIで定義を自動生成</span>
+            </label>
+
+            <label style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:4 }}>
               <input type="checkbox" checked={isPublic} onChange={(e)=>setIsPublic(e.target.checked)} />
               <span className="settings-label">公開デッキにする</span>
             </label>
@@ -1486,7 +1506,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
         <div className="settings-card" style={{ marginTop:18 }}>
           <div className="section-title">タグ</div>
           <div style={{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" }}>
-            <input className="settings-select" value={tagInput} onChange={(e)=>setTagInput(e.target.value)} placeholder="タグを追加" />
+            <input className="settings-select" value={tagInput} onChange={(e)=>setTagInput(e.target.value)} placeholder="＃タグを追加" />
             <button className="nbtn" onClick={addTag}>タグ追加</button>
           </div>
           {tags.length > 0 && (
@@ -1505,21 +1525,16 @@ function CreateView({initial,onSave,onBack,showToast}) {
               <div key={card.id} className="card-card">
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                   <strong>{index + 1}</strong>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button className="nbtn" onClick={()=>generateCardDefinition(card.id)} disabled={generatingCardId===card.id}>
-                      {generatingCardId===card.id ? "生成中..." : "定義を生成"}
-                    </button>
-                    <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
-                  </div>
+                  <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
                 </div>
                 <div style={{ display:"flex", gap:0 }}>
                   <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)" }}>
-                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
                     <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>用語</div>
                   </div>
                   <div style={{ flex:1, paddingLeft:16 }}>
-                    <input className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder="定義を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
-                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>定義</div>
+                    <input className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>{generatingCardId===card.id ? "AI生成中..." : "定義"}</div>
                   </div>
                 </div>
               </div>
@@ -1647,6 +1662,8 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   const [answering, setAnswering] = useState(false);
   const [results, setResults] = useState([]);
   const [done, setDone] = useState(false);
+  const [startTime] = useState(() => Date.now());
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   useEffect(() => {
     const shuffled = shuffle(cards);
@@ -1693,6 +1710,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   const percent = cards.length ? Math.round((correctCount / cards.length) * 100) : 0;
 
   const finishQuiz = async (finalResults) => {
+    setElapsedSec(Math.round((Date.now() - startTime) / 1000));
     onUpdateStreaks(deck.id, finalResults);
     if (finalResults.every((r) => r.correct)) {
       onCleared(deck.id);
@@ -1770,19 +1788,62 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   };
 
   if (done) {
+    const incorrectCount = cards.length - correctCount;
+    const formatTime = (sec) => {
+      if (sec < 60) return `${sec}秒`;
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return s > 0 ? `${m}分${s}秒` : `${m}分`;
+    };
+
     return (
       <div className="study-page">
         <div className="study-nav">
           <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">クイズ結果</span>
+          <span className="study-deck-title">テスト結果</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="study-wrap">
-          <CircularProgress percent={percent} />
-          <div className="result-card">
-            <h3>{correctCount} / {cards.length} 問正解</h3>
-            <p>{percent === 100 ? "満点です。" : "間違えたカードを見直して再挑戦しましょう。"}</p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <div className="result-summary-card">
+            <div className="result-time">あなたのタイム：{formatTime(elapsedSec)}</div>
+
+            <div className="result-donut-row">
+              <ResultDonut percent={percent} />
+              <div className="result-stats">
+                <div className="result-stat-item">
+                  <span className="result-stat-label" style={{ color: "var(--accent)" }}>正解</span>
+                  <span className="result-stat-value result-stat-correct">{correctCount}</span>
+                </div>
+                <div className="result-stat-item">
+                  <span className="result-stat-label" style={{ color: "var(--coral)" }}>不正解</span>
+                  <span className="result-stat-value result-stat-incorrect">{incorrectCount}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="result-message">
+              {percent === 100
+                ? "満点です！すべてのカードをマスターしました。"
+                : percent >= 70
+                  ? "よく頑張りました。間違えたカードを復習しましょう。"
+                  : "間違えたカードを見直して再挑戦しましょう。"}
+            </div>
+
+            <div className="result-answers-title">あなたの回答</div>
+            <div className="result-answers-list">
+              {queue.map((card, i) => {
+                const r = results[i];
+                return (
+                  <div key={card.id} className={`result-answer-row ${r?.correct ? "correct" : "incorrect"}`}>
+                    <div className="result-answer-icon">{r?.correct ? "\u2713" : "\u2717"}</div>
+                    <div className="result-answer-word">{card.word}</div>
+                    <div className="result-answer-def">{card.definition}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               <button className="nbtn" onClick={onBack}>デッキに戻る</button>
               <button className="nbtn primary" onClick={() => {
                 const shuffled = shuffle(cards);
@@ -1897,6 +1958,43 @@ function CircularProgress({ percent }) {
   );
 }
 
+function ResultDonut({ percent }) {
+  const [animVal, setAnimVal] = useState(0);
+  const R = 64, STROKE = 14, SIZE = (R + STROKE) * 2;
+  const C = 2 * Math.PI * R;
+
+  useEffect(() => {
+    let start = null;
+    const duration = 1200;
+    const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3) / 2;
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      const progress = Math.min(elapsed / duration, 1);
+      setAnimVal(Math.round(ease(progress) * percent));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [percent]);
+
+  const correctOffset = C - (animVal / 100) * C;
+  return (
+    <div style={{ position: "relative", width: SIZE, height: SIZE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <svg width={SIZE} height={SIZE} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={R+STROKE} cy={R+STROKE} r={R} fill="none" stroke="var(--coral)" strokeWidth={STROKE} />
+        <circle cx={R+STROKE} cy={R+STROKE} r={R} fill="none"
+          stroke="var(--accent)" strokeWidth={STROKE} strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={correctOffset}
+          style={{ transition: "stroke-dashoffset 0.05s linear" }}
+        />
+      </svg>
+      <div style={{ position: "absolute", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <span style={{ fontSize: 32, fontWeight: 800, color: "var(--text)" }}>{animVal}<span style={{ fontSize: 16 }}>%</span></span>
+      </div>
+    </div>
+  );
+}
+
 // SHARED
 function Navbar({left,center,right}) {
   return (
@@ -1956,7 +2054,7 @@ function Styles() {
     ".tag.active,.tag:hover{border-color:var(--accent);background:var(--accent-dim);color:var(--accent);}",
     ".muted{color:var(--text2);font-size:14px;}",
     // page
-    ".quizlet-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;padding-top:32px;align-items:start;}",
+    ".app-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;padding-top:32px;align-items:start;}",
     ".shell-main{min-width:0;display:grid;gap:24px;}",
     ".app-sidebar{position:sticky;top:84px;display:grid;gap:18px;}",
     ".sidebar-brand,.sidebar-note,.sidebar-group{background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 10px 30px rgba(15,23,42,.05);}",
@@ -1985,6 +2083,9 @@ function Styles() {
     ".launch-kicker{font-size:11px!important;font-weight:800!important;letter-spacing:.08em;text-transform:uppercase;opacity:.82;}",
     ".launch-card-manual{background:linear-gradient(135deg,#1d4ed8,#2563eb 55%,#38bdf8);color:#fff;}",
     ".launch-card-ai{background:linear-gradient(135deg,#6d28d9,#7c3aed 58%,#ec4899);color:#fff;}",
+    ".launch-card-featured{transform:scale(1.04);box-shadow:0 24px 48px rgba(109,40,217,.25),0 0 0 2px rgba(124,58,237,.3);position:relative;overflow:hidden;}",
+    ".launch-card-featured::before{content:'おすすめ';position:absolute;top:12px;right:-28px;background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:800;padding:3px 32px;transform:rotate(40deg);letter-spacing:.06em;backdrop-filter:blur(4px);}",
+    ".launch-card-featured:hover{transform:scale(1.06);box-shadow:0 28px 54px rgba(109,40,217,.3),0 0 0 2px rgba(124,58,237,.4);}",
     ".stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:24px;}",
     ".stat-chip{display:grid;gap:4px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.9);border:1px solid rgba(108,99,255,.12);}",
     ".stat-chip strong{font-size:24px;font-weight:800;color:var(--text);}",
@@ -2024,7 +2125,12 @@ function Styles() {
     ".fav-btn{font-size:16px;background:rgba(255,255,255,.85);border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#aaa;transition:all .2s;backdrop-filter:blur(6px);}",
     ".fav-btn:hover{background:#fff;color:var(--coral);}",
     ".fav-on{color:var(--coral)!important;background:#fff!important;}",
-    ".study-fav-btn{width:auto;height:auto;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:800;color:var(--text2);}",
+    ".study-fav-btn{width:44px;height:44px;padding:0;border-radius:50%;color:#ccc;}",
+    ".study-fav-btn:hover{color:var(--coral);background:rgba(255,255,255,.95);}",
+    ".study-fav-btn.fav-on{color:var(--coral);background:#fff;}",
+    ".fav-heart-btn{display:inline-flex;align-items:center;justify-content:center;color:#aaa;padding:6px;}",
+    ".fav-heart-btn:hover{color:var(--coral);}",
+    ".fav-heart-btn.fav-on{color:var(--coral);}",
     ".fav-count{font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.42);border-radius:10px;padding:1px 7px;text-align:center;}",
     ".crown-badge,.ai-badge{font-size:14px;background:rgba(255,255,255,.85);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}",
     ".ai-badge{font-size:10px;font-weight:800;color:var(--accent);background:rgba(255,255,255,.9);border-radius:8px;width:auto;padding:2px 7px;border-radius:8px;}",
@@ -2202,6 +2308,25 @@ function Styles() {
     ".write-textarea:focus{border-color:var(--accent);}",
     ".write-textarea:disabled{opacity:.45;}",
     ".result-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;gap:14px;text-align:center;}",
+    ".result-summary-card{background:var(--surface);border-radius:var(--r);padding:32px 28px;max-width:520px;width:100%;margin:0 auto;box-shadow:var(--shadow);}",
+    ".result-time{font-size:18px;font-weight:700;color:var(--text);text-align:center;margin-bottom:24px;}",
+    ".result-donut-row{display:flex;align-items:center;justify-content:center;gap:36px;margin-bottom:24px;}",
+    ".result-stats{display:grid;gap:16px;}",
+    ".result-stat-item{display:flex;align-items:center;gap:14px;}",
+    ".result-stat-label{font-size:16px;font-weight:700;min-width:56px;}",
+    ".result-stat-value{display:flex;align-items:center;justify-content:center;min-width:48px;height:42px;padding:0 14px;border-radius:10px;font-size:20px;font-weight:800;}",
+    ".result-stat-correct{color:var(--accent);border:2px solid var(--accent);background:var(--accent-dim);}",
+    ".result-stat-incorrect{color:var(--coral);border:2px solid var(--coral);background:var(--coral-dim);}",
+    ".result-message{text-align:center;font-size:15px;color:var(--text2);margin-bottom:20px;line-height:1.6;}",
+    ".result-answers-title{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:10px;}",
+    ".result-answers-list{display:grid;gap:0;margin-bottom:8px;}",
+    ".result-answer-row{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,2fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--border);font-size:14px;}",
+    ".result-answers-list .result-answer-row:first-child{border-top:none;}",
+    ".result-answer-icon{font-size:16px;font-weight:800;text-align:center;}",
+    ".result-answer-row.correct .result-answer-icon{color:var(--accent);}",
+    ".result-answer-row.incorrect .result-answer-icon{color:var(--coral);}",
+    ".result-answer-word{font-weight:600;color:var(--text);}",
+    ".result-answer-def{color:var(--text2);line-height:1.4;}",
     // toast
     ".toast-popup{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);font-family:var(--ff);font-size:14px;font-weight:600;padding:11px 26px;border-radius:40px;z-index:9999;}",
     ".tp-ok{background:var(--accent);color:#fff;}",
@@ -2224,7 +2349,7 @@ function Styles() {
     ".rt-btn:hover{background:var(--border);color:var(--text);}",
     ".rt-textarea{flex:1;min-height:70px;padding:10px 14px;outline:none;font-family:var(--ff);font-size:14px;line-height:1.6;color:var(--text);border:none;background:transparent;resize:vertical;width:100%;}",
     ".rt-textarea::placeholder{color:var(--text3);}",
-    "@media(max-width:1100px){.quizlet-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
+    "@media(max-width:1100px){.app-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
     "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:140px;}.term-row{grid-template-columns:1fr;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:1fr;gap:10px;}.navbar-left,.navbar-center,.navbar-right{justify-content:flex-start;}.section-head{align-items:flex-start;flex-direction:column;}}",
     "@media(max-width:640px){.page-shell,.page{padding:0 16px 72px;}.dashboard-title,.set-header-title{max-width:none;}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:18px;}.launch-card strong{font-size:26px;}}",
 
