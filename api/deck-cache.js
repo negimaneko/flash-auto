@@ -192,7 +192,7 @@ async function generateInitialDeck({ topic, wordLang, defLang, detailLevel }) {
   const parsed = parseDeckPayload(raw);
 
   return {
-    deckName: String(parsed.deckName || "").trim() || "AI生成デッキ",
+    deckName: String(parsed.deckName || "").trim() || "AI生成単語帳",
     tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 10) : [],
     cards: sanitizeCards(parsed.cards, 10, 15),
   };
@@ -323,7 +323,7 @@ export default async function handler(req, res) {
 
       const cached = await fetchCachedDeckById(supabase, cacheId);
       if (!cached) {
-        return res.status(404).json({ error: "キャッシュ済みデッキが見つかりません。" });
+        return res.status(404).json({ error: "キャッシュ済み単語帳が見つかりません。" });
       }
 
       const mergedExistingWords = [

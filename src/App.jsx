@@ -63,7 +63,7 @@ const getLangLabel = (code) => {
 };
 const toLanguageInputValue = (value, fallback = "ja") =>
   getLangLabel(normalizeLanguageValue(value, fallback));
-const ANONYMOUS_USER_ID_KEY = "mnemox-anonymous-user-id";
+const ANONYMOUS_USER_ID_KEY = "flash auto-anonymous-user-id";
 const AI_GENERATE_DAILY_LIMIT = 3;
 
 function buildAnonymousUserId() {
@@ -102,7 +102,7 @@ const WORD_COUNTS = [
 
 const SPLASH_DURATION_MS = 2000;
 const SPLASH_LOGO_SRC = "";
-const SPLASH_LOGO_ALT = "mnemox";
+const SPLASH_LOGO_ALT = "flash auto";
 
 function getDeckTheme(deck) {
   const h = [deck.name, ...(deck.tags || [])].join(" ");
@@ -277,7 +277,7 @@ async function fetchDeckFromCacheOrGenerate(payload) {
   const result = isJson ? await response.json() : { error: await response.text() };
 
   if (!response.ok) {
-    throw new Error(result.error || "デッキの取得に失敗しました。");
+    throw new Error(result.error || "単語帳の取得に失敗しました。");
   }
 
   return result;
@@ -291,16 +291,23 @@ async function aiSuggest({term,wordLang,defLang,detailLevel,deckName,otherWords}
   const dl = getLangLabel(normalizedDefLang);
   const lvl = DETAIL_LEVELS.find(l=>l.id===detailLevel) || DETAIL_LEVELS[1];
   const context = (otherWords || []).filter(Boolean).slice(0, 12).join(", ");
-  const prompt = [
-    normalizedWordLang === "technical"
-      ? `Define the technical term "${term}" as it is commonly used in Japan, and write the definition in ${dl}.`
-      : `Explain the word "${term}" from ${wl} in ${dl}.`,
-    `Deck: ${deckName || "Untitled"}`,
-    context ? `Related words: ${context}` : "",
-    lvl.id === 1 ? "Return one short sentence." : lvl.id === 2 ? "Return 2-3 sentences." : "Return 4-6 sentences with examples.",
-    "Return the definition only.",
-  ].filter(Boolean).join("\n");
-  const maxTk = lvl.id===1 ? 80 : lvl.id===2 ? 200 : 500;
+  const isTechnical = normalizedWordLang === "technical";
+  const prompt = isTechnical
+    ? [
+        `Define the technical term "${term}" as it is commonly used in Japan, and write the definition in ${dl}.`,
+        `Deck: ${deckName || "Untitled"}`,
+        context ? `Related words: ${context}` : "",
+        lvl.id === 1 ? "Return one short sentence." : lvl.id === 2 ? "Return 2-3 sentences." : "Return 4-6 sentences with examples.",
+        "Return the definition only.",
+      ].filter(Boolean).join("\n")
+    : [
+        `Translate the ${wl} word "${term}" into ${dl}.`,
+        `Return only the translated word or short phrase in ${dl}. Do not add any explanation, examples, or extra sentences.`,
+        context ? `Context (related words in this deck): ${context}` : "",
+      ].filter(Boolean).join("\n");
+  const maxTk = isTechnical
+    ? (lvl.id===1 ? 80 : lvl.id===2 ? 200 : 500)
+    : 30;
   return (await callAI(prompt, maxTk)).trim();
 }
 
@@ -386,7 +393,7 @@ function SplashScreen() {
   const showImage = Boolean(SPLASH_LOGO_SRC) && !logoFailed;
 
   return (
-    <div className="splash-screen" aria-label="mnemox スプラッシュスクリーン">
+    <div className="splash-screen" aria-label="flash auto スプラッシュスクリーン">
       <div className="splash-mark">
         {showImage ? (
           <img
@@ -396,7 +403,7 @@ function SplashScreen() {
             onError={() => setLogoFailed(true)}
           />
         ) : (
-          <span className="splash-logo-text">mnemox</span>
+          <span className="splash-logo-text">flash auto</span>
         )}
       </div>
     </div>
@@ -411,6 +418,7 @@ export default function App() {
   const [quizMode, setQuizMode] = useState("choice");
   const [toast, setToast] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [appCredits, setAppCredits] = useState(AI_GENERATE_DAILY_LIMIT);
 
   useEffect(() => {
     getAnonymousUserId();
@@ -443,7 +451,7 @@ export default function App() {
     setDecks(prev=>[...prev, normalizedDeck]);
     setActiveDeck(normalizedDeck);
     setView("detail");
-    showToast("デッキを作成しました");
+    showToast("単語帳を作成しました");
   };
   const toggleFavorite = (id) => {
     setDecks(prev=>prev.map(d=>d.id===id
@@ -493,7 +501,7 @@ export default function App() {
     <div className="app">
       <Styles/>
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
-      {view==="home"      && <HomeView decks={decks} onOpenDetail={openDetail}
+      {view==="home"      && <HomeView decks={decks} credits={appCredits} onOpenDetail={openDetail}
                                onNew={()=>{setEditDeck(null);setView("create");}}
                                onGenerate={()=>setView("generate")}
                                onLibrary={()=>setView("library")}
@@ -529,7 +537,7 @@ function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
       <div className="sidebar-brand">
         <div className="sidebar-brand-mark">M</div>
         <div>
-          <div className="sidebar-brand-title">MNEMOX</div>
+          <div className="sidebar-brand-title">Flash Auto</div>
           <div className="sidebar-brand-sub">学習セット</div>
         </div>
       </div>
@@ -555,7 +563,7 @@ function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
   );
 }
 
-function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete}) {
+function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete}) {
   const [filter,setFilter] = useState("all");
   const shown = filter==="fav" ? decks.filter(d=>d.favorited) : decks;
   const totalCards = decks.reduce((sum, deck)=>sum + deck.cards.length, 0);
@@ -564,9 +572,10 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
   return (
     <div className="page">
       <Navbar right={
-        <div style={{ display:"flex", gap:8 }}>
-          <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI生成</button>
-          <button className="nbtn primary" onClick={onNew}>手動作成</button>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div className="credit-badge"><svg className="credit-gem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg><span>{credits}</span></div>
+          <button className="nbtn ai-btn" onClick={onGenerate}><span className="btn-plus">+</span> ✨ AI作成</button>
+          <button className="nbtn primary" onClick={onNew}><span className="btn-plus">+</span> 手動作成</button>
         </div>
       }/>
       <div className="app-shell">
@@ -586,12 +595,12 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
             <div className="launch-grid">
               <button className="launch-card launch-card-ai launch-card-featured" onClick={onGenerate}>
                 <span className="launch-kicker">AIに任せる</span>
-                <strong>✨ AI作成</strong>
+                <strong><span className="btn-plus">+</span> ✨ AI作成</strong>
                 <span>テーマだけ決めて、カードのたたき台を一気に生成します。</span>
               </button>
               <button className="launch-card launch-card-manual" onClick={onNew}>
                 <span className="launch-kicker">手動で始める</span>
-                <strong>手動作成</strong>
+                <strong><span className="btn-plus">+</span> 手動作成</strong>
                 <span>自分で単語と定義を入力して、オリジナルのセットをすぐ作成します。</span>
               </button>
             </div>
@@ -624,8 +633,8 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
                 <p>{filter==="fav" ? "お気に入りのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
-                    <button className="nbtn primary" onClick={onNew}>手動作成</button>
+                    <button className="nbtn ai-btn" onClick={onGenerate}><span className="btn-plus">+</span> ✨ AI作成</button>
+                    <button className="nbtn primary" onClick={onNew}><span className="btn-plus">+</span> 手動作成</button>
                   </div>
                 )}
               </div>
@@ -831,7 +840,7 @@ function GenerateView({onSave,onBack,showToast}) {
 
   const continueGenerate = async () => {
     if (!generated) {
-      showToast("先にデッキを生成してください", "err");
+      showToast("先に単語帳を生成してください", "err");
       return;
     }
 
@@ -854,7 +863,18 @@ function GenerateView({onSave,onBack,showToast}) {
         existingWords: generated.cards.map((card) => card.word),
       });
 
-      applyGeneratedDeckResult(result.deck, result.cacheId || generatedCacheId, result.remainingCredits, generated.defLang);
+      const mergedDeck = {
+        ...result.deck,
+        deckName: result.deck?.deckName || generated.name,
+        tags: result.deck?.tags || generated.tags,
+        wordLang: result.deck?.wordLang || generated.wordLang,
+        defLang: result.deck?.defLang || generated.defLang,
+        detailLevel: result.deck?.detailLevel || generated.detailLevel,
+        cards: result.deck?.deckName
+          ? result.deck.cards
+          : [...generated.cards.map(c => ({ word: c.word, definition: c.definition })), ...(result.deck?.cards || [])],
+      };
+      applyGeneratedDeckResult(mergedDeck, result.cacheId || generatedCacheId, result.remainingCredits, generated.defLang);
       showToast(`${result.addedCount || 0}枚のカードを追加しました`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
@@ -878,7 +898,7 @@ function GenerateView({onSave,onBack,showToast}) {
       />
 
       <div className="hero-panel">
-        <div className="section-title">学習デッキを生成</div>
+        <div className="section-title">学習単語帳を生成</div>
         <p style={{ color: "var(--text2)", marginTop: 8 }}>
           テーマを入力し、出力設定を選んで、生成されたカードを確認してから保存できます。
         </p>
@@ -926,7 +946,7 @@ function GenerateView({onSave,onBack,showToast}) {
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button className="nbtn primary" onClick={startGenerate} disabled={loading}>
-              {loading ? "生成中..." : "デッキを生成"}
+              {loading ? "生成中..." : "単語帳を生成"}
             </button>
             <button className="nbtn" onClick={onBack}>キャンセル</button>
           </div>
@@ -1000,7 +1020,7 @@ function GenerateView({onSave,onBack,showToast}) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-            <button className="nbtn primary" onClick={saveDeck}>デッキを保存</button>
+            <button className="nbtn primary" onClick={saveDeck}>単語帳を保存</button>
             <button className="nbtn" onClick={startGenerate} disabled={loading}>再生成</button>
             <button className="nbtn" onClick={continueGenerate} disabled={continuing || loading || !generatedCacheId}>
               {continuing ? "追加生成中..." : "1クレジットで続きを5〜10枚追加"}
@@ -1044,7 +1064,7 @@ function LibraryView({decks,onBack,onOpenDetail,onToggleFav}) {
             <div className="search-row">
               <input
                 className="search-input"
-                placeholder="デッキ名やタグで検索"
+                placeholder="単語帳名やタグで検索"
                 value={query}
                 onChange={(e)=>setQuery(e.target.value)}
               />
@@ -1201,7 +1221,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
     { id:"flip", label:"フラッシュカード", desc:"1枚ずつカードをめくって確認します。", color:"#22c55e" },
     { id:"quiz-choice", label:"4択クイズ", desc:"4つの選択肢から答えます。", color:"#0ea5e9" },
     { id:"quiz-write", label:"記述クイズ", desc:"答えを自分で入力します。", color:"#f97316" },
-    { id:"test", label:"テスト", desc:"全問正解でデッキクリア！形式を選べます。", color:"#8b5cf6" },
+    { id:"test", label:"テスト", desc:"全問正解で単語帳クリア！形式を選べます。", color:"#8b5cf6" },
   ];
   const masteredCount = (deck.masteredIds || []).length;
 
@@ -1213,7 +1233,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
         right={(
           <div style={{ display:"flex", gap:8 }}>
             <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></button>
-            <button className="nbtn" onClick={onEdit}>デッキ編集</button>
+            <button className="nbtn" onClick={onEdit}>単語帳編集</button>
             <button className="nbtn danger" onClick={onDelete}>削除</button>
           </div>
         )}
@@ -1267,7 +1287,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
           <div className="test-submenu-overlay" onClick={() => setTestSubMenu(false)}>
             <div className="test-submenu-card" onClick={(e) => e.stopPropagation()}>
               <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>テスト形式を選択</h3>
-              <p style={{ margin: "0 0 16px", color: "var(--text3)", fontSize: 14 }}>全問正解するとデッキをクリアできます。</p>
+              <p style={{ margin: "0 0 16px", color: "var(--text3)", fontSize: 14 }}>全問正解すると単語帳をクリアできます。</p>
               <div style={{ display: "grid", gap: 10 }}>
                 <button className="mode-big-btn" style={{ "--mc": "#0ea5e9" }} onClick={() => { setTestSubMenu(false); onStartMode("quiz-choice"); }}>
                   <strong>選択式テスト</strong>
@@ -1346,6 +1366,14 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
   );
 }
 
+function AutoTextarea({value, ...props}) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(ref.current){ref.current.style.height="auto";ref.current.style.height=ref.current.scrollHeight+"px";}
+  },[value]);
+  return <textarea ref={ref} value={value} {...props} />;
+}
+
 function CreateView({initial,onSave,onBack,showToast}) {
   const isEdit = !!initial;
   const [name,setName]=useState(initial?.name || "");
@@ -1358,6 +1386,8 @@ function CreateView({initial,onSave,onBack,showToast}) {
   const [cards,setCards]=useState(initial?.cards?.length ? initial.cards : [{ id:uid(), word:"", definition:"" }]);
   const [generatingCardId,setGeneratingCardId]=useState(null);
   const [autoAI,setAutoAI]=useState(true);
+  const cardsRef = useRef(cards);
+  useEffect(()=>{ cardsRef.current = cards; }, [cards]);
 
   const updateCard=(id,field,value)=>{
     setCards((prev)=>prev.map((card)=>card.id===id ? { ...card, [field]: value } : card));
@@ -1388,7 +1418,8 @@ function CreateView({initial,onSave,onBack,showToast}) {
   };
 
   const generateCardDefinition = async (cardId) => {
-    const target = cards.find((card)=>card.id===cardId);
+    const latest = cardsRef.current;
+    const target = latest.find((card)=>card.id===cardId);
     if (!target?.word.trim()) {
       showToast("先に単語を入力してください", "err");
       return;
@@ -1401,7 +1432,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
         defLang,
         detailLevel,
         deckName: name,
-        otherWords: cards.filter((card)=>card.id!==cardId).map((card)=>card.word),
+        otherWords: latest.filter((card)=>card.id!==cardId).map((card)=>card.word),
       });
       updateCard(cardId, "definition", definition);
       showToast("定義を生成しました");
@@ -1414,14 +1445,17 @@ function CreateView({initial,onSave,onBack,showToast}) {
 
   const handleWordBlur = (cardId) => {
     if (!autoAI) return;
-    const target = cards.find((card)=>card.id===cardId);
-    if (!target?.word.trim() || target.definition.trim()) return;
-    generateCardDefinition(cardId);
+    setTimeout(() => {
+      const latest = cardsRef.current;
+      const target = latest.find((card)=>card.id===cardId);
+      if (!target?.word.trim() || target.definition.trim()) return;
+      generateCardDefinition(cardId);
+    }, 100);
   };
 
   const handleSave=()=>{
     if(!name.trim()){
-      showToast("デッキ名を入力してください","err");
+      showToast("単語帳名を入力してください","err");
       return;
     }
 
@@ -1483,14 +1517,16 @@ function CreateView({initial,onSave,onBack,showToast}) {
           )}
 
           <div style={{ display:"flex", gap:16, flexWrap:"wrap", alignItems:"end", marginTop:14 }}>
-            <label style={{ display:"grid", gap:8, flex:"0 0 auto", minWidth:140 }}>
-              <span className="settings-label">説明の詳しさ</span>
-              <select className="settings-select" value={detailLevel} onChange={(e)=>setDetailLevel(Number(e.target.value))}>
-                {DETAIL_LEVELS.map((level)=>(
-                  <option key={level.id} value={level.id}>{level.label}</option>
-                ))}
-              </select>
-            </label>
+            {wordLang === "technical" && (
+              <label style={{ display:"grid", gap:8, flex:"0 0 auto", minWidth:140 }}>
+                <span className="settings-label">説明の詳しさ</span>
+                <select className="settings-select" value={detailLevel} onChange={(e)=>setDetailLevel(Number(e.target.value))}>
+                  {DETAIL_LEVELS.map((level)=>(
+                    <option key={level.id} value={level.id}>{level.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:4 }}>
               <input type="checkbox" checked={autoAI} onChange={(e)=>setAutoAI(e.target.checked)} />
@@ -1499,7 +1535,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
 
             <label style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:4 }}>
               <input type="checkbox" checked={isPublic} onChange={(e)=>setIsPublic(e.target.checked)} />
-              <span className="settings-label">公開デッキにする</span>
+              <span className="settings-label">公開単語帳にする</span>
             </label>
           </div>
         </div>
@@ -1528,13 +1564,13 @@ function CreateView({initial,onSave,onBack,showToast}) {
                   <strong>{index + 1}</strong>
                   <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
                 </div>
-                <div style={{ display:"flex", gap:0 }}>
-                  <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)" }}>
+                <div style={{ display:"flex", gap:0, alignItems:"stretch" }}>
+                  <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)", display:"flex", flexDirection:"column" }}>
                     <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
                     <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>用語</div>
                   </div>
-                  <div style={{ flex:1, paddingLeft:16 }}>
-                    <input className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                  <div style={{ flex:1, paddingLeft:16, display:"flex", flexDirection:"column" }}>
+                    <AutoTextarea className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} rows={1} style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0, resize:"none", overflow:"hidden", fontFamily:"inherit", fontSize:"inherit", lineHeight:"1.5" }} />
                     <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>{generatingCardId===card.id ? "AI生成中..." : "定義"}</div>
                   </div>
                 </div>
@@ -1555,6 +1591,7 @@ function FlipView({deck,onBack}) {
   const [qi, setQi] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [frontIsWord, setFrontIsWord] = useState(true);
+  const [slideDir, setSlideDir] = useState(null);
 
   useEffect(() => {
     setQi(0);
@@ -1566,7 +1603,7 @@ function FlipView({deck,onBack}) {
       <div className="study-page">
         <div className="study-nav">
           <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">学習中: {deck?.name || "無題"}</span>
+          <span className="study-deck-title">{deck?.name || "無題"}</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="study-wrap">
@@ -1584,68 +1621,67 @@ function FlipView({deck,onBack}) {
   const backText = frontIsWord ? card.definition : card.word;
 
   const goPrev = () => {
+    if (qi === 0) return;
+    setSlideDir("left");
     setFlipped(false);
-    setQi((i) => (i - 1 + cards.length) % cards.length);
+    setTimeout(() => {
+      setQi((i) => i - 1);
+      setSlideDir(null);
+    }, 200);
   };
 
   const goNext = () => {
+    if (qi === cards.length - 1) return;
+    setSlideDir("right");
     setFlipped(false);
-    setQi((i) => (i + 1) % cards.length);
+    setTimeout(() => {
+      setQi((i) => i + 1);
+      setSlideDir(null);
+    }, 200);
   };
 
   return (
     <div className="study-page">
       <div className="study-nav">
-        <button className="nbtn ghost" onClick={onBack}>戻る</button>
-        <span className="study-deck-title">学習中: {deck.name}</span>
+        <button className="nbtn ghost" onClick={onBack}>← 戻る</button>
+        <span className="study-deck-title">{deck.name}</span>
         <button className="mode-switch-btn" onClick={() => { setFrontIsWord((f) => !f); setFlipped(false); }}>
-          {frontIsWord ? "単語を先に表示" : "定義を先に表示"}
+          {frontIsWord ? "単語が表" : "定義が表"}
         </button>
       </div>
 
-      <div className="study-wrap">
-        <div className="study-progress">{qi + 1} / {cards.length}</div>
+      <div className="flip-view-body">
         <button
           type="button"
-          className={"flashcard " + (flipped ? "is-flipped" : "")}
+          className={"flip-card " + (flipped ? "flipped" : "") + (slideDir ? " slide-" + slideDir : "")}
           onClick={() => setFlipped((v) => !v)}
-          style={{ cursor: "pointer" }}
         >
-          <div className="flashcard-inner">
-            <div className="flashcard-face flashcard-front">
-              <div className="fc-label">{frontIsWord ? "単語" : "定義"}</div>
-              <div className="fc-text">{frontText || "-"}</div>
-              <div className="fc-hint">タップして裏返す</div>
+          <div className="flip-card-inner">
+            <div className="flip-card-face flip-card-front">
+              <div className="flip-card-text">{frontText || "-"}</div>
             </div>
-            <div className="flashcard-face flashcard-back">
-              <div className="fc-label">{frontIsWord ? "定義" : "単語"}</div>
-              <div className="fc-text">{backText || "-"}</div>
-              <div className="fc-hint">タップして戻る</div>
+            <div className="flip-card-face flip-card-back">
+              <div className="flip-card-text">{backText || "-"}</div>
             </div>
           </div>
         </button>
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-          <button className="fc-nav" onClick={goPrev}>前へ</button>
-          <button className="fc-nav primary" onClick={() => setFlipped((v) => !v)}>
-            {flipped ? "答えを隠す" : "答えを見る"}
+        <div className="flip-nav-row">
+          <button
+            className={"flip-arrow-btn" + (qi === 0 ? " disabled" : "")}
+            onClick={goPrev}
+            disabled={qi === 0}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <button className="fc-nav" onClick={goNext}>次へ</button>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-          {cards.map((_, i) => (
-            <span
-              key={i}
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: i === qi ? "var(--accent)" : "var(--border2)",
-                display: "inline-block"
-              }}
-            />
-          ))}
+          <span className="flip-counter">{qi + 1} / {cards.length}</span>
+          <button
+            className={"flip-arrow-btn" + (qi === cards.length - 1 ? " disabled" : "")}
+            onClick={goNext}
+            disabled={qi === cards.length - 1}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -1715,7 +1751,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
     onUpdateStreaks(deck.id, finalResults);
     if (finalResults.every((r) => r.correct)) {
       onCleared(deck.id);
-      showToast?.("デッキ達成です！", "success");
+      showToast?.("単語帳達成です！", "success");
       setDone(true);
       return;
     }
@@ -1724,7 +1760,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
       const mastery = await aiMastery(finalResults);
       if (mastery.cleared) {
         onCleared(deck.id);
-        showToast?.(mastery.message || "デッキ達成です！", "success");
+        showToast?.(mastery.message || "単語帳達成です！", "success");
       } else if (mastery.message) {
         showToast?.(mastery.message, "info");
       }
@@ -1881,7 +1917,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
-              <button className="nbtn" onClick={onBack}>デッキに戻る</button>
+              <button className="nbtn" onClick={onBack}>単語帳に戻る</button>
               <button className="nbtn primary" onClick={() => {
                 const shuffled = shuffle(cards);
                 setQueue(shuffled);
@@ -1917,10 +1953,15 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
         {mode === "choice" ? (
           <div className="choice-grid">
             {choices.map((choice) => {
+              let cls = "choice-btn";
+              if (selectedId) {
+                if (choice.id === current.id) cls += " c-correct";
+                else if (choice.id === selectedId) cls += " c-wrong";
+              }
               return (
                 <button
                   key={choice.id}
-                  className={"choice-btn " + (selectedId === choice.id ? "selected" : "")}
+                  className={cls}
                   onClick={() => submitChoice(choice)}
                   disabled={Boolean(selectedId)}
                 >
@@ -1932,7 +1973,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <textarea
-              className="text-input"
+              className="write-textarea"
               rows={5}
               placeholder="定義を入力"
               value={input}
@@ -2036,7 +2077,7 @@ function ResultDonut({ percent, colorVar = "--accent", bgColorVar = "--coral" })
 function Navbar({left,center,right}) {
   return (
     <header className="navbar">
-      <div className="navbar-left">{left||<div className="logo">MNEMOX</div>}</div>
+      <div className="navbar-left">{left||<div className="logo">Flash Auto</div>}</div>
       <div className="navbar-center">{center}</div>
       <div className="navbar-right">{right}</div>
     </header>
@@ -2066,6 +2107,9 @@ function Styles() {
     ".logo{font-family:'Outfit',sans-serif;font-weight:800;font-size:22px;letter-spacing:.04em;background:linear-gradient(135deg,var(--accent),var(--coral));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}",
     ".nav-center-title{font-weight:700;font-size:16px;color:var(--text);}",
     // buttons
+    ".credit-badge{display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:999px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1.5px solid rgba(99,102,241,.2);font-weight:700;font-size:14px;color:#6366f1;font-family:var(--ff);}",
+    ".credit-gem{color:#6366f1;flex-shrink:0;}",
+    ".btn-plus{font-size:1.4em;font-weight:900;line-height:1;vertical-align:middle;}",
     ".nbtn{font-family:var(--ff);font-weight:600;font-size:14px;padding:9px 18px;border-radius:var(--r-sm);cursor:pointer;transition:all .2s;border:1.5px solid transparent;}",
     ".nbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".nbtn.primary:hover{background:var(--accent2);}",
@@ -2318,25 +2362,37 @@ function Styles() {
     ".gen-card-list{display:flex;flex-direction:column;gap:3px;flex:1;}",
     // study
     ".study-page{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);}",
+    ".study-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:32px 20px;gap:20px;max-width:660px;margin:0 auto;width:100%;}",
+    ".study-progress{font-size:14px;font-weight:700;color:var(--text2);}",
+    ".quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;text-align:center;width:100%;box-shadow:var(--shadow);}",
+    ".quiz-feedback{margin-top:8px;padding:12px 18px;border-radius:var(--r-sm);font-size:14px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);text-align:center;}",
     ".study-nav{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.92);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100;}",
     ".study-deck-title{font-size:14px;font-weight:700;color:var(--text);}",
     ".study-progress-bar{height:4px;background:var(--surface3);}",
     ".study-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--coral));transition:width .35s ease;}",
     ".mode-switch-btn{font-family:var(--ff);font-size:13px;font-weight:600;padding:6px 13px;border-radius:var(--r-sm);background:var(--surface2);border:1.5px solid var(--border);color:var(--text2);cursor:pointer;}",
     ".flip-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:26px;}",
-    ".fc{width:min(560px,90vw);height:288px;perspective:1200px;cursor:pointer;}",
-    ".fc-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.4,0,.2,1);}",
-    ".fc.flipped .fc-inner{transform:rotateY(180deg);}",
-    ".fc-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:var(--r);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;}",
-    ".fc-front{background:var(--surface);border:1.5px solid var(--border);}",
-    ".fc-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#9333ea);}",
-    ".fc-lang{font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.08em;position:absolute;top:16px;}",
-    ".fc-term{font-size:clamp(24px,5vw,50px);font-weight:800;text-align:center;color:var(--text);}",
-    ".fc-def{font-size:clamp(13px,2.2vw,19px);text-align:center;color:#fff;line-height:1.65;}",
-    ".fc-nav{background:var(--surface);border:1.5px solid var(--border);border-radius:50%;width:48px;height:48px;font-size:21px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}",
+    ".flip-view-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:28px;max-width:720px;margin:0 auto;width:100%;}",
+    ".flip-card{width:min(620px,92vw);height:360px;perspective:1200px;cursor:pointer;border:none;background:none;padding:0;outline:none;transition:opacity .2s;}",
+    ".flip-card.slide-left{opacity:0;transform:translateX(40px);}",
+    ".flip-card.slide-right{opacity:0;transform:translateX(-40px);}",
+    ".flip-card-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1);}",
+    ".flip-card.flipped .flip-card-inner{transform:rotateY(180deg);}",
+    ".flip-card-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;display:flex;align-items:center;justify-content:center;padding:40px;box-shadow:0 4px 24px rgba(0,0,0,.12);}",
+    ".flip-card-front{background:var(--surface);border:1.5px solid var(--border);}",
+    ".flip-card-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#7c3aed);}",
+    ".flip-card-text{font-size:clamp(20px,4.5vw,36px);font-weight:700;text-align:center;color:var(--text);line-height:1.5;word-break:break-word;overflow-y:auto;max-height:100%;}",
+    ".flip-card-back .flip-card-text{color:#fff;}",
+    ".flip-nav-row{display:flex;align-items:center;gap:32px;justify-content:center;}",
+    ".flip-arrow-btn{width:48px;height:48px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;padding:0;}",
+    ".flip-arrow-btn:hover:not(.disabled){background:var(--accent);border-color:var(--accent);color:#fff;}",
+    ".flip-arrow-btn.disabled{opacity:.3;cursor:default;}",
+    ".flip-counter{font-size:16px;font-weight:700;color:var(--text2);min-width:60px;text-align:center;}",
+    ".fc-nav{font-family:var(--ff);background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 22px;font-size:14px;font-weight:600;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}",
     ".fc-nav:hover{background:var(--accent);border-color:var(--accent);color:#fff;}",
+    ".fc-nav.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".quiz-stage{flex:1;display:flex;flex-direction:column;align-items:center;padding:28px 20px;gap:18px;max-width:660px;margin:0 auto;width:100%;}",
-    ".choices-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:9px;}",
+    ".choice-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:9px;}",
     ".choice-btn{padding:16px 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;color:var(--text);cursor:pointer;text-align:center;line-height:1.5;transition:all .18s;}",
     ".choice-btn:hover{border-color:var(--accent);background:var(--accent-dim);}",
     ".c-correct{border-color:var(--green)!important;background:var(--green-dim)!important;color:var(--green)!important;font-weight:700;}",

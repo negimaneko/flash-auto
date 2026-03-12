@@ -26,6 +26,230 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload))
 }
 
+// --- deck-cache helpers (local dev, no Supabase) ---
+
+function normalizeLanguageValue(value, fallback = 'ja') {
+  const text = String(value ?? '').trim()
+  return text || fallback
+}
+
+function normalizeWordKey(word) {
+  return String(word ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function parseDeckPayload(raw) {
+  const cleaned = String(raw || '').split('```json').join('').split('```').join('').trim()
+  return JSON.parse(cleaned)
+}
+
+function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
+  const excluded = new Set(excludedWords.map(normalizeWordKey))
+  const seen = new Set()
+
+  const sanitized = (Array.isArray(cards) ? cards : [])
+    .filter((card) => card?.word && card?.definition)
+    .map((card) => ({
+      word: String(card.word).trim(),
+      definition: String(card.definition).trim(),
+    }))
+    .filter((card) => {
+      const key = normalizeWordKey(card.word)
+      if (!key || excluded.has(key) || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, maxCards)
+
+  if (sanitized.length < minCards) {
+    throw new Error('AI returned an invalid deck.')
+  }
+
+  return sanitized
+}
+
+function buildInitialPrompt({ topic, wordLang, defLang, detailLevel }) {
+  const detailInstructions = detailLevel === 1
+    ? 'Each definition should be one short sentence.'
+    : detailLevel === 2
+      ? 'Each definition should be 2-3 sentences.'
+      : 'Each definition should be detailed and include examples.'
+
+  const wordLangInstruction = wordLang && wordLang !== 'technical'
+    ? `Word/term language: ${wordLang} (write each word/term in ${wordLang}).`
+    : 'Words/terms should be in the original language commonly used for the topic.'
+
+  return [
+    `Create a study flashcard deck about: ${topic}`,
+    'Number of cards: 10 to 15.',
+    'You must always return at least 10 cards in the cards array.',
+    'Start from the 10 most important cards.',
+    'If there are additional must-know terms that do not fit within those 10, you may add up to 5 extra cards.',
+    'Only add extra cards when they are clearly essential.',
+    'Never return fewer than 10 cards, and never return more than 15 cards.',
+    wordLangInstruction,
+    `Definition language: ${defLang}`,
+    detailInstructions,
+    'Return JSON only: {"deckName":"...","tags":["#tag1","#tag2"],"cards":[{"word":"...","definition":"..."}]}',
+  ].join('\n')
+}
+
+function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords }) {
+  const detailInstructions = detailLevel === 1
+    ? 'Each definition should be one short sentence.'
+    : detailLevel === 2
+      ? 'Each definition should be 2-3 sentences.'
+      : 'Each definition should be detailed and include examples.'
+
+  const wordLangInstruction = wordLang && wordLang !== 'technical'
+    ? `Word/term language: ${wordLang} (write each word/term in ${wordLang}).`
+    : 'Words/terms should be in the original language commonly used for the topic.'
+
+  return [
+    `Continue a study flashcard deck about: ${topic}`,
+    `Already generated words: ${existingWords.join(', ')}`,
+    'Generate 5 to 10 additional cards.',
+    'Every new card must be a new term and must not duplicate or paraphrase any existing word.',
+    'Only add genuinely useful next-step terms that expand the deck.',
+    wordLangInstruction,
+    `Definition language: ${defLang}`,
+    detailInstructions,
+    'Return JSON only: {"cards":[{"word":"...","definition":"..."}]}',
+  ].join('\n')
+}
+
+async function requestGroqChatDirect(apiKey, prompt, maxTokens) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: maxTokens,
+      temperature: 0.7,
+    }),
+  })
+
+  const data = await response.json()
+  if (!response.ok || data.error) {
+    throw new Error(data.error?.message || 'Groq request failed')
+  }
+
+  const text = data.choices?.[0]?.message?.content || ''
+  if (!text) throw new Error('AI returned an empty response')
+  return text
+}
+
+async function requestOllamaChatDirect(baseUrl, model, prompt, maxTokens) {
+  const resolvedModel = await resolveOllamaModel(baseUrl, model)
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: resolvedModel,
+      prompt,
+      stream: false,
+      options: { temperature: 0.7, num_predict: maxTokens || 4000 },
+    }),
+  })
+
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data.error || 'Ollama request failed')
+  }
+
+  const text = String(data.response || '').trim()
+  if (!text) throw new Error('Ollama returned an empty response')
+  return text
+}
+
+async function requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, maxTokens) {
+  // Try Ollama first (local), then Groq (cloud)
+  try {
+    return await requestOllamaChatDirect(ollamaBaseUrl, ollamaModel, prompt, maxTokens)
+  } catch {
+    // Ollama unavailable, try Groq
+  }
+
+  if (apiKey) {
+    return await requestGroqChatDirect(apiKey, prompt, maxTokens)
+  }
+
+  throw new Error('AI生成に失敗しました。Ollamaが起動していないか、GROQ_API_KEYが設定されていません。')
+}
+
+async function handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+  if (req.method === 'OPTIONS') { res.statusCode = 200; res.end(); return }
+  if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return }
+
+  let body
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'Invalid JSON body' }); return }
+
+  const action = String(body.action || 'initial').trim()
+  const topic = String(body.topic || '').trim()
+  const wordLang = normalizeLanguageValue(body.wordLang, 'technical')
+  const defLang = normalizeLanguageValue(body.defLang)
+  const detailLevel = Number(body.detailLevel || 2)
+
+  if (!topic) { sendJson(res, 400, { error: 'topic is required' }); return }
+
+  try {
+    if (action === 'initial') {
+      const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel })
+      const raw = await requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, 4000)
+      const parsed = parseDeckPayload(raw)
+      const cards = sanitizeCards(parsed.cards, 10, 15)
+
+      sendJson(res, 200, {
+        source: 'generated',
+        remainingCredits: null,
+        cacheId: null,
+        deck: {
+          deckName: String(parsed.deckName || '').trim() || 'AI生成単語帳',
+          tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 10) : [],
+          cards,
+          wordLang,
+          defLang,
+          detailLevel,
+        },
+      })
+      return
+    }
+
+    if (action === 'continue') {
+      const existingWords = Array.isArray(body.existingWords)
+        ? body.existingWords.map((w) => String(w || '').trim()).filter(Boolean)
+        : []
+
+      const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords })
+      const raw = await requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, 2500)
+      const parsed = parseDeckPayload(raw)
+      const cards = sanitizeCards(parsed.cards, 5, 10, existingWords)
+
+      sendJson(res, 200, {
+        source: 'continued',
+        addedCount: cards.length,
+        remainingCredits: null,
+        cacheId: null,
+        deck: { cards },
+      })
+      return
+    }
+
+    sendJson(res, 400, { error: 'Unsupported action' })
+  } catch (error) {
+    sendJson(res, 500, { error: error instanceof Error ? error.message : 'Deck generation failed' })
+  }
+}
+
+// --- Groq proxy ---
+
 async function handleGroqProxy(req, res, apiKey) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -180,6 +404,11 @@ export default defineConfig(({ mode }) => {
         name: 'local-ai-api',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
+            if (req.url?.startsWith('/api/deck-cache')) {
+              await handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel)
+              return
+            }
+
             if (req.url?.startsWith('/api/ollama')) {
               await handleOllamaProxy(req, res, ollamaBaseUrl, ollamaModel)
               return
