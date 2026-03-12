@@ -789,7 +789,7 @@ function GenerateView({onSave,onBack,showToast}) {
   };
 
   const continueGenerate = async () => {
-    if (!generated || !generatedCacheId) {
+    if (!generated) {
       showToast("先にデッキを生成してください", "err");
       return;
     }
@@ -880,7 +880,7 @@ function GenerateView({onSave,onBack,showToast}) {
           <div style={{ color: "var(--text3)", fontSize: 13, display: "grid", gap: 4 }}>
             <span>AI生成は基本10枚、必要なら超重要語句を最大5枚まで追加します / {selectedDetail.desc}</span>
             <span>匿名ユーザーごとに1日{AI_GENERATE_DAILY_LIMIT}クレジットです。キャッシュヒット時は消費せず、初回生成と続き追加が各1クレジットです。</span>
-            <span>残りクレジット: {remainingCredits}</span>
+            {typeof remainingCredits === "number" && <span>残りクレジット: {remainingCredits}</span>}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

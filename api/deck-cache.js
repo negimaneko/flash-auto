@@ -1,5 +1,5 @@
 import { requestGroqChat } from "./_shared/groq.js";
-import { getSupabaseAdmin } from "./_shared/supabase.js";
+import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
 
 const DAILY_CREDIT_LIMIT = Number(process.env.AI_GENERATE_DAILY_LIMIT || 3);
 
@@ -215,6 +215,50 @@ export default async function handler(req, res) {
     const supabase = getSupabaseAdmin();
     const topicKey = normalizeTopicKey(topic);
 
+    // --- Supabase未設定時: キャッシュ・クレジットなしで直接生成 ---
+    if (!supabase) {
+      if (action === "initial") {
+        const generated = await generateInitialDeck({ topic, defLang, detailLevel });
+        return res.status(200).json({
+          source: "generated",
+          remainingCredits: null,
+          cacheId: null,
+          deck: {
+            deckName: generated.deckName,
+            tags: generated.tags,
+            cards: generated.cards,
+            wordLang: "technical",
+            defLang,
+            detailLevel,
+          },
+        });
+      }
+
+      if (action === "continue") {
+        const existingWords = Array.isArray(req.body?.existingWords)
+          ? req.body.existingWords.map((word) => String(word || "").trim()).filter(Boolean)
+          : [];
+
+        const continuationCards = await generateContinuationCards({
+          topic,
+          defLang,
+          detailLevel,
+          existingWords,
+        });
+
+        return res.status(200).json({
+          source: "continued",
+          addedCount: continuationCards.length,
+          remainingCredits: null,
+          cacheId: null,
+          deck: { cards: continuationCards },
+        });
+      }
+
+      return res.status(400).json({ error: "Unsupported action" });
+    }
+
+    // --- Supabase設定済み: キャッシュ・クレジットあり ---
     if (action === "initial") {
       const cached = await fetchCachedDeck(supabase, topicKey, defLang);
       const remainingCredits = Math.max(0, DAILY_CREDIT_LIMIT - await readCredits(supabase, userId, usageDate));
