@@ -473,7 +473,8 @@ export default function App() {
         if (!r) return c;
         return { ...c, streak: r.correct ? (c.streak || 0) + 1 : 0 };
       });
-      return normalizeDeck({ ...d, cards: newCards });
+      const masteredIds = newCards.filter(c => (c.streak || 0) >= 2).map(c => c.id);
+      return normalizeDeck({ ...d, cards: newCards, masteredIds });
     };
     setDecks(prev => prev.map(patch));
     setActiveDeck(prev => prev && prev.id === deckId ? patch(prev) : prev);
@@ -1796,11 +1797,23 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
       return s > 0 ? `${m}分${s}秒` : `${m}分`;
     };
 
+    // 暗記率を計算: 今回の結果を反映した各カードのstreakから判定
+    const masteryMap = cards.map(c => {
+      const r = results.find(x => x.id === c.id);
+      const prevStreak = c.streak || 0;
+      const newStreak = r ? (r.correct ? prevStreak + 1 : 0) : prevStreak;
+      return { id: c.id, mastered: newStreak >= 2 };
+    });
+    const masteredCount = masteryMap.filter(m => m.mastered).length;
+    const masteryPercent = cards.length ? Math.round((masteredCount / cards.length) * 100) : 0;
+
+    const isChoiceMode = mode === "choice";
+
     return (
       <div className="study-page">
         <div className="study-nav">
           <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">テスト結果</span>
+          <span className="study-deck-title">{isChoiceMode ? "クイズ結果" : "テスト結果"}</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="study-wrap">
@@ -1821,6 +1834,26 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
               </div>
             </div>
 
+            {isChoiceMode && (
+              <div className="mastery-section">
+                <div className="mastery-header">達成度（暗記率）</div>
+                <div className="mastery-sub">2回連続正解で暗記と判定されます</div>
+                <div className="result-donut-row" style={{ marginTop: 16 }}>
+                  <ResultDonut percent={masteryPercent} colorVar="--green" bgColorVar="--border" />
+                  <div className="result-stats">
+                    <div className="result-stat-item">
+                      <span className="result-stat-label" style={{ color: "var(--green)" }}>暗記済み</span>
+                      <span className="result-stat-value" style={{ color: "var(--green)", border: "2px solid var(--green)", background: "var(--green-dim)" }}>{masteredCount}</span>
+                    </div>
+                    <div className="result-stat-item">
+                      <span className="result-stat-label" style={{ color: "var(--text3)" }}>未暗記</span>
+                      <span className="result-stat-value" style={{ color: "var(--text3)", border: "2px solid var(--border)", background: "var(--surface2)" }}>{cards.length - masteredCount}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="result-message">
               {percent === 100
                 ? "満点です！すべてのカードをマスターしました。"
@@ -1833,10 +1866,14 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
             <div className="result-answers-list">
               {queue.map((card, i) => {
                 const r = results[i];
+                const m = isChoiceMode ? masteryMap.find(x => x.id === card.id) : null;
                 return (
                   <div key={card.id} className={`result-answer-row ${r?.correct ? "correct" : "incorrect"}`}>
                     <div className="result-answer-icon">{r?.correct ? "\u2713" : "\u2717"}</div>
-                    <div className="result-answer-word">{card.word}</div>
+                    <div className="result-answer-word">
+                      {card.word}
+                      {m?.mastered && <span className="mastery-badge">暗記済</span>}
+                    </div>
                     <div className="result-answer-def">{card.definition}</div>
                   </div>
                 );
@@ -1958,7 +1995,7 @@ function CircularProgress({ percent }) {
   );
 }
 
-function ResultDonut({ percent }) {
+function ResultDonut({ percent, colorVar = "--accent", bgColorVar = "--coral" }) {
   const [animVal, setAnimVal] = useState(0);
   const R = 64, STROKE = 14, SIZE = (R + STROKE) * 2;
   const C = 2 * Math.PI * R;
@@ -1981,9 +2018,9 @@ function ResultDonut({ percent }) {
   return (
     <div style={{ position: "relative", width: SIZE, height: SIZE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <svg width={SIZE} height={SIZE} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={R+STROKE} cy={R+STROKE} r={R} fill="none" stroke="var(--coral)" strokeWidth={STROKE} />
+        <circle cx={R+STROKE} cy={R+STROKE} r={R} fill="none" stroke={`var(${bgColorVar})`} strokeWidth={STROKE} />
         <circle cx={R+STROKE} cy={R+STROKE} r={R} fill="none"
-          stroke="var(--accent)" strokeWidth={STROKE} strokeLinecap="round"
+          stroke={`var(${colorVar})`} strokeWidth={STROKE} strokeLinecap="round"
           strokeDasharray={C} strokeDashoffset={correctOffset}
           style={{ transition: "stroke-dashoffset 0.05s linear" }}
         />
@@ -2327,6 +2364,10 @@ function Styles() {
     ".result-answer-row.incorrect .result-answer-icon{color:var(--coral);}",
     ".result-answer-word{font-weight:600;color:var(--text);}",
     ".result-answer-def{color:var(--text2);line-height:1.4;}",
+    ".mastery-section{border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px;}",
+    ".mastery-header{font-size:16px;font-weight:700;color:var(--text);text-align:center;}",
+    ".mastery-sub{font-size:13px;color:var(--text3);text-align:center;margin-top:4px;}",
+    ".mastery-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:var(--green-dim);color:var(--green);vertical-align:middle;}",
     // toast
     ".toast-popup{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);font-family:var(--ff);font-size:14px;font-weight:600;padding:11px 26px;border-radius:40px;z-index:9999;}",
     ".tp-ok{background:var(--accent);color:#fff;}",
