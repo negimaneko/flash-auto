@@ -1,6 +1,7 @@
 .DS_Store
 node_modules/
 dist/
+.vite/
 .vercel
 .env*.local
 .env.local
