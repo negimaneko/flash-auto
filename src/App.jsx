@@ -246,9 +246,9 @@ function normalizeDecks(decks = []) {
 const uid = () => Math.random().toString(36).slice(2,9);
 const shuffle = arr => [...arr].sort(()=>Math.random()-.5);
 
-// Groq API helper (via serverless proxy)
-async function callGroq(prompt, maxTokens = 1024) {
-  const endpoints = ["/api/groq", "/api/gemini"];
+// AI API helper (prefer local Ollama, then fall back to hosted endpoints)
+async function callAI(prompt, maxTokens = 1024) {
+  const endpoints = ["/api/ollama", "/api/groq", "/api/gemini"];
   let lastError = null;
 
   for (const endpoint of endpoints) {
@@ -301,14 +301,14 @@ async function aiSuggest({term,wordLang,defLang,detailLevel,deckName,otherWords}
     "Return the definition only.",
   ].filter(Boolean).join("\n");
   const maxTk = lvl.id===1 ? 80 : lvl.id===2 ? 200 : 500;
-  return (await callGroq(prompt, maxTk)).trim();
+  return (await callAI(prompt, maxTk)).trim();
 }
 
 // AI: quiz evaluation
 async function aiEval(term,correctDef,userAns,defLang) {
   try {
     const prompt = `Evaluate whether the learner answer matches the correct definition. Term: ${term}\nCorrect: ${correctDef}\nLearner: ${userAns}\nReturn JSON only: {"correct":true/false,"feedback":"short feedback in ${getLangLabel(normalizeLanguageValue(defLang))}"}`;
-    const raw = await callGroq(prompt, 200);
+    const raw = await callAI(prompt, 200);
     const cleaned = raw.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"correct":false,"feedback":""}');
   } catch(e){ return {correct:false,feedback:"Could not evaluate the answer."}; }
@@ -318,7 +318,7 @@ async function aiEval(term,correctDef,userAns,defLang) {
 async function aiMastery(results) {
   try {
     const prompt = `Judge whether this study result means the learner mastered the deck. Result: ${JSON.stringify(results)}\nReturn JSON only: {"cleared":true/false,"message":"short message in Japanese"}`;
-    const raw = await callGroq(prompt, 200);
+    const raw = await callAI(prompt, 200);
     const cleaned = raw.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"cleared":false,"message":""}');
   } catch(e){ return {cleared:false,message:"Mastery check could not be completed."}; }
@@ -340,7 +340,7 @@ async function aiGenerateDeck({topic, defLang, detailLevel}) {
     dl.id === 1 ? "Each definition should be one short sentence." : dl.id === 2 ? "Each definition should be 2-3 sentences." : "Each definition should be detailed and include examples.",
     'Return JSON only: {"deckName":"...","tags":["#tag1","#tag2"],"cards":[{"word":"...","definition":"..."}]}'
   ].join("\n");
-  const raw = await callGroq(prompt, 4000);
+  const raw = await callAI(prompt, 4000);
   const cleaned = raw.split("```json").join("").split("```").join("").trim();
   const parsed = JSON.parse(cleaned);
   if (!Array.isArray(parsed.cards) || parsed.cards.length < 10) {

@@ -1,6 +1,39 @@
 # MNEMOX
 
-MNEMOX は、Groq を使って AI 生成と回答判定を行う単語帳アプリです。
+MNEMOX は、AI 生成と回答判定を行う単語帳アプリです。ローカルの Ollama 上の `qwen` 系モデルを優先し、利用できない場合は Groq にフォールバックします。
+
+## ローカルで qwen を使う手順
+
+### 1. Ollama を起動する
+
+`qwen3.5 9b` をダウンロード済みでも、API サーバが起動していないと MNEMOX から使えません。
+
+```bash
+ollama serve
+```
+
+別ターミナルで、モデル名を確認してください。
+
+```bash
+ollama list
+```
+
+### 2. `.env.local` を作る
+
+```env
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen3.5:9b
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+`OLLAMA_MODEL` は `ollama list` に出る正確な名前に合わせてください。Groq はフォールバック用なので、ローカル専用でよければ未設定でも動きます。
+
+### 3. 起動する
+
+```bash
+npm install
+npm run dev
+```
 
 ## Vercel で使う手順
 
@@ -34,22 +67,10 @@ node setup-key.js
 vercel --prod
 ```
 
-## ローカル開発
-
-`.env.local` を作って、Groq API キーを設定してください。
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-その後に起動します。
-
-```bash
-npm run dev
-```
-
 ## 補足
 
+- `/api/ollama` を最優先で呼び、失敗した場合は `/api/groq`、`/api/gemini` の順にフォールバックします。
+- Vercel からユーザーのローカル Ollama には接続できないため、`qwen` を使う場合は基本的にローカル起動が前提です。
 - 現在の正式な API ルートは `/api/groq` です。
 - `/api/gemini` は古いビルド互換のためのエイリアスとして残しています。
-- 実際の AI プロバイダは Gemini ではなく Groq です。
+- `/api/gemini` は実体としては `/api/groq` のエイリアスです。
