@@ -28,8 +28,6 @@ const toLanguageInputValue = (value, fallback = "ja") =>
   getLangLabel(normalizeLanguageValue(value, fallback));
 const ANONYMOUS_USER_ID_KEY = "mnemox-anonymous-user-id";
 const AI_GENERATE_DAILY_LIMIT = 3;
-const AI_GENERATE_LIMIT_KEY = "mnemox-ai-generate-limit";
-const AI_GENERATE_LIMIT_MESSAGE = "今日の生成枠（3回）を使い切りました。明日またお試しください。";
 
 function buildAnonymousUserId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -52,57 +50,6 @@ function getAnonymousUserId() {
   } catch {
     return null;
   }
-}
-
-function getTodayKey() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function readGenerateUsage() {
-  const today = getTodayKey();
-  if (typeof window === "undefined") return { date: today, count: 0 };
-
-  try {
-    const raw = window.localStorage.getItem(AI_GENERATE_LIMIT_KEY);
-    if (!raw) return { date: today, count: 0 };
-    const parsed = JSON.parse(raw);
-    if (parsed?.date !== today) return { date: today, count: 0 };
-    const count = Number.isFinite(parsed?.count) ? Math.max(0, parsed.count) : 0;
-    return { date: today, count };
-  } catch {
-    return { date: today, count: 0 };
-  }
-}
-
-function writeGenerateUsage(entry) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(AI_GENERATE_LIMIT_KEY, JSON.stringify(entry));
-  } catch {}
-}
-
-function getRemainingGenerateCount() {
-  const usage = readGenerateUsage();
-  return Math.max(0, AI_GENERATE_DAILY_LIMIT - usage.count);
-}
-
-function consumeGenerateUsageSlot() {
-  const usage = readGenerateUsage();
-  if (usage.count >= AI_GENERATE_DAILY_LIMIT) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  const nextUsage = { date: usage.date, count: usage.count + 1 };
-  writeGenerateUsage(nextUsage);
-
-  return {
-    allowed: true,
-    remaining: Math.max(0, AI_GENERATE_DAILY_LIMIT - nextUsage.count),
-  };
 }
 
 const DETAIL_LEVELS = [
@@ -283,6 +230,22 @@ async function callAI(prompt, maxTokens = 1024) {
   throw lastError || new Error("AI API route is not available");
 }
 
+async function fetchDeckFromCacheOrGenerate(payload) {
+  const response = await fetch("/api/deck-cache", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const isJson = (response.headers.get("content-type") || "").includes("application/json");
+  const result = isJson ? await response.json() : { error: await response.text() };
+
+  if (!response.ok) {
+    throw new Error(result.error || "デッキの取得に失敗しました。");
+  }
+
+  return result;
+}
+
 // AI: single card definition
 async function aiSuggest({term,wordLang,defLang,detailLevel,deckName,otherWords}) {
   const normalizedWordLang = normalizeLanguageValue(wordLang);
@@ -322,34 +285,6 @@ async function aiMastery(results) {
     const cleaned = raw.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"cleared":false,"message":""}');
   } catch(e){ return {cleared:false,message:"Mastery check could not be completed."}; }
-}
-
-// AI: generate full deck from topic
-async function aiGenerateDeck({topic, defLang, detailLevel}) {
-  const dl = DETAIL_LEVELS.find(l=>l.id===detailLevel) || DETAIL_LEVELS[1];
-  const normalizedDefLang = normalizeLanguageValue(defLang);
-  const prompt = [
-    `Create a study flashcard deck about: ${topic}`,
-    "Number of cards: 10 to 15.",
-    "You must always return at least 10 cards in the cards array.",
-    "Start from the 10 most important cards.",
-    "If there are additional must-know terms that do not fit within those 10, you may add up to 5 extra cards.",
-    "Only add extra cards when they are clearly essential.",
-    "Never return fewer than 10 cards, and never return more than 15 cards.",
-    `Definition language: ${getLangLabel(normalizedDefLang)}`,
-    dl.id === 1 ? "Each definition should be one short sentence." : dl.id === 2 ? "Each definition should be 2-3 sentences." : "Each definition should be detailed and include examples.",
-    'Return JSON only: {"deckName":"...","tags":["#tag1","#tag2"],"cards":[{"word":"...","definition":"..."}]}'
-  ].join("\n");
-  const raw = await callAI(prompt, 4000);
-  const cleaned = raw.split("```json").join("").split("```").join("").trim();
-  const parsed = JSON.parse(cleaned);
-  if (!Array.isArray(parsed.cards) || parsed.cards.length < 10) {
-    throw new Error("AI returned an invalid deck.");
-  }
-  return {
-    ...parsed,
-    cards: parsed.cards.slice(0, 15),
-  };
 }
 
 function RichTextEditor({ value, onChange, placeholder, style, disabled }) {
@@ -594,7 +529,7 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
   return (
     <div className="page">
       <Navbar right={
-        <button className="nbtn primary" onClick={onNew}>新しいセット</button>
+        <button className="nbtn primary" onClick={onNew}>手動作成</button>
       }/>
       <div className="quizlet-shell">
         <AppSidebar
@@ -610,8 +545,19 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
             <div className="section-kicker">学習ホーム</div>
             <h1 className="dashboard-title">自分の学習セットをまとめて管理</h1>
             <p className="dashboard-copy">Quizletのように、セット一覧からすぐ学習モードへ入り、必要ならAIでカードを増やせる構成にしました。</p>
+            <div className="launch-grid">
+              <button className="launch-card launch-card-manual" onClick={onNew}>
+                <span className="launch-kicker">手動で始める</span>
+                <strong>手動作成</strong>
+                <span>自分で単語と定義を入力して、オリジナルのセットをすぐ作成します。</span>
+              </button>
+              <button className="launch-card launch-card-ai" onClick={onGenerate}>
+                <span className="launch-kicker">AIに任せる</span>
+                <strong>AI作成</strong>
+                <span>テーマだけ決めて、カードのたたき台を一気に生成します。</span>
+              </button>
+            </div>
             <div className="dashboard-actions">
-              <button className="nbtn ai-btn" onClick={onGenerate}>AIでセット生成</button>
               <button className="nbtn ghost" onClick={onLibrary}>公開ライブラリを見る</button>
             </div>
             <div className="stats-row">
@@ -640,8 +586,8 @@ function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onE
                 <p>{filter==="fav" ? "お気に入りのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}>AI生成</button>
-                    <button className="nbtn primary" onClick={onNew}>新規セット</button>
+                    <button className="nbtn ai-btn" onClick={onGenerate}>AI作成</button>
+                    <button className="nbtn primary" onClick={onNew}>手動作成</button>
                   </div>
                 )}
               </div>
@@ -719,29 +665,15 @@ function GenerateView({onSave,onBack,showToast}) {
   const [defLang, setDefLang] = useState(toLanguageInputValue("ja"));
   const [detailLevel, setDetailLevel] = useState(2);
   const [generated, setGenerated] = useState(null);
+  const [generatedCacheId, setGeneratedCacheId] = useState(null);
+  const [remainingCredits, setRemainingCredits] = useState(AI_GENERATE_DAILY_LIMIT);
   const [loading, setLoading] = useState(false);
+  const [continuing, setContinuing] = useState(false);
   const [error, setError] = useState("");
   const [newWord, setNewWord] = useState("");
   const [newDef, setNewDef] = useState("");
-  const [remainingGenerations, setRemainingGenerations] = useState(() => getRemainingGenerateCount());
 
   const selectedDetail = DETAIL_LEVELS.find((item) => item.id === detailLevel) || DETAIL_LEVELS[1];
-
-  useEffect(() => {
-    const refreshRemaining = () => setRemainingGenerations(getRemainingGenerateCount());
-    const handleVisibilityChange = () => {
-      if (!document.hidden) refreshRemaining();
-    };
-
-    refreshRemaining();
-    window.addEventListener("focus", refreshRemaining);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", refreshRemaining);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
 
   const updateCard = (cardId, key, value) => {
     setGenerated((current) => {
@@ -788,17 +720,38 @@ function GenerateView({onSave,onBack,showToast}) {
     setNewDef("");
   };
 
+  const applyGeneratedDeckResult = (deck, cacheId, creditsLeft, fallbackDefLang) => {
+    const cards = (deck?.cards || []).map((card) => ({
+      id: uid(),
+      word: card.word,
+      definition: card.definition,
+    }));
+
+    setGenerated({
+      id: "gen-" + uid(),
+      name: deck?.deckName || topic.trim(),
+      author: "AIアシスタント",
+      isPublic: false,
+      wordLang: deck?.wordLang || "technical",
+      defLang: deck?.defLang || fallbackDefLang,
+      detailLevel: deck?.detailLevel || detailLevel,
+      tags: deck?.tags || [],
+      aiGenerated: true,
+      cleared: false,
+      masteredIds: [],
+      favorited: false,
+      favCount: 0,
+      cards,
+    });
+    setGeneratedCacheId(cacheId || null);
+    if (typeof creditsLeft === "number") {
+      setRemainingCredits(Math.max(0, creditsLeft));
+    }
+  };
+
   const startGenerate = async () => {
     if (!topic.trim()) {
       showToast("テーマを入力してください", "err");
-      return;
-    }
-
-    const usage = consumeGenerateUsageSlot();
-    setRemainingGenerations(getRemainingGenerateCount());
-    if (!usage.allowed) {
-      setError(AI_GENERATE_LIMIT_MESSAGE);
-      showToast(AI_GENERATE_LIMIT_MESSAGE, "err");
       return;
     }
 
@@ -807,35 +760,67 @@ function GenerateView({onSave,onBack,showToast}) {
 
     try {
       const normalizedDefLang = normalizeLanguageValue(defLang);
-      const result = await aiGenerateDeck({ topic, defLang: normalizedDefLang, detailLevel });
-      const cards = result.cards.map((card) => ({
-        id: uid(),
-        word: card.word,
-        definition: card.definition,
-      }));
+      const userId = getAnonymousUserId();
+      if (!userId) {
+        throw new Error("匿名ユーザーIDを作成できませんでした。");
+      }
 
-      setGenerated({
-        id: "gen-" + uid(),
-        name: result.deckName,
-        author: "AIアシスタント",
-        isPublic: false,
-        wordLang: "technical",
+      const result = await fetchDeckFromCacheOrGenerate({
+        action: "initial",
+        topic: topic.trim(),
         defLang: normalizedDefLang,
         detailLevel,
-        tags: result.tags || [],
-        aiGenerated: true,
-        cleared: false,
-        masteredIds: [],
-        favorited: false,
-        favCount: 0,
-        cards,
+        userId,
       });
+      applyGeneratedDeckResult(result.deck, result.cacheId, result.remainingCredits, normalizedDefLang);
+
+      if (result.source === "cache") {
+        showToast("既存の単語帳をキャッシュから表示しました");
+      } else {
+        showToast("新しい単語帳を生成しました");
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
       setError(message);
       showToast(message, "err");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const continueGenerate = async () => {
+    if (!generated || !generatedCacheId) {
+      showToast("先にデッキを生成してください", "err");
+      return;
+    }
+
+    setContinuing(true);
+    setError("");
+
+    try {
+      const userId = getAnonymousUserId();
+      if (!userId) {
+        throw new Error("匿名ユーザーIDを作成できませんでした。");
+      }
+
+      const result = await fetchDeckFromCacheOrGenerate({
+        action: "continue",
+        cacheId: generatedCacheId,
+        topic: topic.trim() || generated.name,
+        defLang: generated.defLang,
+        detailLevel: generated.detailLevel || detailLevel,
+        userId,
+        existingWords: generated.cards.map((card) => card.word),
+      });
+
+      applyGeneratedDeckResult(result.deck, result.cacheId || generatedCacheId, result.remainingCredits, generated.defLang);
+      showToast(`${result.addedCount || 0}枚のカードを追加しました`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
+      setError(message);
+      showToast(message, "err");
+    } finally {
+      setContinuing(false);
     }
   };
 
@@ -894,7 +879,8 @@ function GenerateView({onSave,onBack,showToast}) {
 
           <div style={{ color: "var(--text3)", fontSize: 13, display: "grid", gap: 4 }}>
             <span>AI生成は基本10枚、必要なら超重要語句を最大5枚まで追加します / {selectedDetail.desc}</span>
-            <span>本日のAI生成残り: {remainingGenerations}/{AI_GENERATE_DAILY_LIMIT}</span>
+            <span>匿名ユーザーごとに1日{AI_GENERATE_DAILY_LIMIT}クレジットです。キャッシュヒット時は消費せず、初回生成と続き追加が各1クレジットです。</span>
+            <span>残りクレジット: {remainingCredits}</span>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -975,6 +961,9 @@ function GenerateView({onSave,onBack,showToast}) {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <button className="nbtn primary" onClick={saveDeck}>デッキを保存</button>
             <button className="nbtn" onClick={startGenerate} disabled={loading}>再生成</button>
+            <button className="nbtn" onClick={continueGenerate} disabled={continuing || loading || !generatedCacheId}>
+              {continuing ? "追加生成中..." : "1クレジットで続きを5〜10枚追加"}
+            </button>
           </div>
         </div>
       )}
@@ -1958,6 +1947,14 @@ function Styles() {
     ".dashboard-title{font-size:clamp(30px,4vw,44px);font-weight:800;line-height:1.08;color:var(--text);max-width:12ch;}",
     ".dashboard-copy{font-size:15px;line-height:1.7;color:var(--text2);margin-top:12px;max-width:64ch;}",
     ".dashboard-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;}",
+    ".launch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:24px;}",
+    ".launch-card{font-family:var(--ff);display:grid;gap:8px;padding:22px 22px 20px;border:none;border-radius:24px;text-align:left;cursor:pointer;box-shadow:0 20px 40px rgba(15,23,42,.12);transition:transform .18s,box-shadow .18s,opacity .18s;}",
+    ".launch-card:hover{transform:translateY(-2px);box-shadow:0 26px 46px rgba(15,23,42,.16);}",
+    ".launch-card strong{font-size:30px;font-weight:800;line-height:1.1;}",
+    ".launch-card span{font-size:14px;line-height:1.6;}",
+    ".launch-kicker{font-size:11px!important;font-weight:800!important;letter-spacing:.08em;text-transform:uppercase;opacity:.82;}",
+    ".launch-card-manual{background:linear-gradient(135deg,#1d4ed8,#2563eb 55%,#38bdf8);color:#fff;}",
+    ".launch-card-ai{background:linear-gradient(135deg,#6d28d9,#7c3aed 58%,#ec4899);color:#fff;}",
     ".stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:24px;}",
     ".stat-chip{display:grid;gap:4px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.9);border:1px solid rgba(108,99,255,.12);}",
     ".stat-chip strong{font-size:24px;font-weight:800;color:var(--text);}",
@@ -2196,7 +2193,7 @@ function Styles() {
     ".rt-textarea::placeholder{color:var(--text3);}",
     "@media(max-width:1100px){.quizlet-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.composer-panel{position:static;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
     "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:140px;}.term-row{grid-template-columns:1fr;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:1fr;gap:10px;}.navbar-left,.navbar-center,.navbar-right{justify-content:flex-start;}.section-head{align-items:flex-start;flex-direction:column;}}",
-    "@media(max-width:640px){.page-shell,.page{padding:0 16px 72px;}.dashboard-title,.set-header-title{max-width:none;}.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:18px;}}",
+    "@media(max-width:640px){.page-shell,.page{padding:0 16px 72px;}.dashboard-title,.set-header-title{max-width:none;}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:18px;}.launch-card strong{font-size:26px;}}",
 
   ].join("\n");
   return <style dangerouslySetInnerHTML={{__html: css}}/>;
