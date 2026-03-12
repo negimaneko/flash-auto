@@ -18,6 +18,37 @@ const LANGUAGES = [
   { code: "ru", label: "ロシア語" },
   { code: "ar", label: "アラビア語" },
   { code: "hi", label: "ヒンディー語" },
+  { code: "th", label: "タイ語" },
+  { code: "vi", label: "ベトナム語" },
+  { code: "id", label: "インドネシア語" },
+  { code: "ms", label: "マレー語" },
+  { code: "tl", label: "タガログ語" },
+  { code: "nl", label: "オランダ語" },
+  { code: "sv", label: "スウェーデン語" },
+  { code: "da", label: "デンマーク語" },
+  { code: "no", label: "ノルウェー語" },
+  { code: "fi", label: "フィンランド語" },
+  { code: "pl", label: "ポーランド語" },
+  { code: "cs", label: "チェコ語" },
+  { code: "hu", label: "ハンガリー語" },
+  { code: "ro", label: "ルーマニア語" },
+  { code: "uk", label: "ウクライナ語" },
+  { code: "el", label: "ギリシャ語" },
+  { code: "tr", label: "トルコ語" },
+  { code: "he", label: "ヘブライ語" },
+  { code: "fa", label: "ペルシャ語" },
+  { code: "bn", label: "ベンガル語" },
+  { code: "ta", label: "タミル語" },
+  { code: "te", label: "テルグ語" },
+  { code: "ur", label: "ウルドゥー語" },
+  { code: "sw", label: "スワヒリ語" },
+  { code: "my", label: "ミャンマー語" },
+  { code: "km", label: "クメール語" },
+  { code: "lo", label: "ラオ語" },
+  { code: "mn", label: "モンゴル語" },
+  { code: "ka", label: "ジョージア語" },
+  { code: "hy", label: "アルメニア語" },
+  { code: "la", label: "ラテン語" },
   { code: "technical", label: "専門用語" },
 ];
 const getLangLabel = (code) => {
@@ -328,7 +359,8 @@ function RichTextEditor({ value, onChange, placeholder, style, disabled }) {
   );
 }
 
-function LanguageInput({ value, onChange, listId, placeholder = "例: 日本語、English、Français" }) {
+function LanguageInput({ value, onChange, listId, placeholder = "例: 日本語、English、Français", includeSpecial = false }) {
+  const options = includeSpecial ? LANGUAGES : LANGUAGES.filter((lang) => lang.code !== "technical");
   return (
     <>
       <input
@@ -339,7 +371,7 @@ function LanguageInput({ value, onChange, listId, placeholder = "例: 日本語�
         placeholder={placeholder}
       />
       <datalist id={listId}>
-        {LANGUAGES.filter((lang) => lang.code !== "technical").map((lang) => (
+        {options.map((lang) => (
           <option key={lang.code} value={lang.label} label={lang.code} />
         ))}
       </datalist>
@@ -662,6 +694,7 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
 // AI GENERATE VIEW
 function GenerateView({onSave,onBack,showToast}) {
   const [topic, setTopic] = useState("");
+  const [wordLang, setWordLang] = useState(toLanguageInputValue("technical"));
   const [defLang, setDefLang] = useState(toLanguageInputValue("ja"));
   const [detailLevel, setDetailLevel] = useState(2);
   const [generated, setGenerated] = useState(null);
@@ -765,9 +798,11 @@ function GenerateView({onSave,onBack,showToast}) {
         throw new Error("匿名ユーザーIDを作成できませんでした。");
       }
 
+      const normalizedWordLang = normalizeLanguageValue(wordLang);
       const result = await fetchDeckFromCacheOrGenerate({
         action: "initial",
         topic: topic.trim(),
+        wordLang: normalizedWordLang,
         defLang: normalizedDefLang,
         detailLevel,
         userId,
@@ -856,15 +891,15 @@ function GenerateView({onSave,onBack,showToast}) {
             </span>
           </label>
 
-          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             <label style={{ display: "grid", gap: 8 }}>
-              <span>定義の言語</span>
-              <LanguageInput value={defLang} onChange={setDefLang} listId="generate-definition-language-options" />
+              <span>単語の言語</span>
+              <LanguageInput value={wordLang} onChange={setWordLang} listId="generate-word-language-options" includeSpecial />
             </label>
 
             <label style={{ display: "grid", gap: 8 }}>
-              <span>カード数</span>
-              <input className="settings-select" value="10〜15枚固定" readOnly />
+              <span>定義の言語</span>
+              <LanguageInput value={defLang} onChange={setDefLang} listId="generate-definition-language-options" />
             </label>
 
             <label style={{ display: "grid", gap: 8 }}>
@@ -1155,10 +1190,12 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
     }
   };
 
+  const [testSubMenu, setTestSubMenu] = useState(false);
   const modes=[
     { id:"flip", label:"フラッシュカード", desc:"1枚ずつカードをめくって確認します。", color:"#22c55e" },
     { id:"quiz-choice", label:"4択クイズ", desc:"4つの選択肢から答えます。", color:"#0ea5e9" },
     { id:"quiz-write", label:"記述クイズ", desc:"答えを自分で入力します。", color:"#f97316" },
+    { id:"test", label:"テスト", desc:"全問正解でデッキクリア！形式を選べます。", color:"#8b5cf6" },
   ];
   const masteredCount = (deck.masteredIds || []).length;
 
@@ -1198,6 +1235,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
           <button className="nbtn primary" onClick={()=>onStartMode("flip")}>フラッシュカード開始</button>
           <button className="nbtn ghost" onClick={()=>onStartMode("quiz-choice")}>4択クイズ</button>
           <button className="nbtn ghost" onClick={()=>onStartMode("quiz-write")}>記述クイズ</button>
+          <button className="nbtn ghost" style={{ borderColor: "#8b5cf6", color: "#8b5cf6" }} onClick={()=>setTestSubMenu(true)}>テスト</button>
         </div>
       </section>
 
@@ -1210,12 +1248,34 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
         </div>
         <div className="mode-grid">
           {modes.map((mode)=>(
-            <button key={mode.id} className="mode-big-btn" style={{ "--mc": mode.color }} onClick={()=>onStartMode(mode.id)}>
+            <button key={mode.id} className="mode-big-btn" style={{ "--mc": mode.color }} onClick={()=>{
+              if (mode.id === "test") { setTestSubMenu(true); } else { onStartMode(mode.id); }
+            }}>
               <strong>{mode.label}</strong>
               <span>{mode.desc}</span>
             </button>
           ))}
         </div>
+
+        {testSubMenu && (
+          <div className="test-submenu-overlay" onClick={() => setTestSubMenu(false)}>
+            <div className="test-submenu-card" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>テスト形式を選択</h3>
+              <p style={{ margin: "0 0 16px", color: "var(--text3)", fontSize: 14 }}>全問正解するとデッキをクリアできます。</p>
+              <div style={{ display: "grid", gap: 10 }}>
+                <button className="mode-big-btn" style={{ "--mc": "#0ea5e9" }} onClick={() => { setTestSubMenu(false); onStartMode("quiz-choice"); }}>
+                  <strong>選択式テスト</strong>
+                  <span>4つの選択肢から正しい定義を選びます。</span>
+                </button>
+                <button className="mode-big-btn" style={{ "--mc": "#f97316" }} onClick={() => { setTestSubMenu(false); onStartMode("quiz-write"); }}>
+                  <strong>記述式テスト</strong>
+                  <span>定義を自分で書いて答えます。</span>
+                </button>
+              </div>
+              <button className="nbtn ghost" style={{ marginTop: 12, width: "100%" }} onClick={() => setTestSubMenu(false)}>キャンセル</button>
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="detail-layout">
@@ -1264,8 +1324,8 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
                       <div className="term-value">{card.definition}</div>
                     </div>
                     <div className="term-actions">
-                      <button className="nbtn ghost" onClick={()=>startEdit(card)}>編集</button>
-                      <button className="nbtn danger" onClick={()=>removeCard(card)}>削除</button>
+                      <button className="nbtn ghost icon-btn" onClick={()=>startEdit(card)} title="編集">&#9998;</button>
+                      <button className="nbtn danger icon-btn" onClick={()=>removeCard(card)} title="削除">&#128465;</button>
                     </div>
                   </>
                 )}
@@ -1275,31 +1335,6 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
           </div>
         </section>
 
-        <aside className="composer-panel">
-          <div className="section-head">
-            <div>
-              <div className="section-kicker">用語を追加</div>
-              <h2 className="section-heading">新しいカード</h2>
-            </div>
-          </div>
-          <div className="composer-form">
-            <input className="settings-select" value={newWord} onChange={(e)=>setNewWord(e.target.value)} placeholder="単語" />
-            <textarea
-              className="settings-select"
-              value={newDef}
-              onChange={(e)=>setNewDef(e.target.value)}
-              placeholder="定義"
-              rows={5}
-              style={{ resize:"vertical" }}
-            />
-            <div className="composer-actions">
-              <button className="nbtn" onClick={generateNewDefinition} disabled={generatingNew}>
-                {generatingNew ? "生成中..." : "定義を生成"}
-              </button>
-              <button className="nbtn primary" onClick={addCard}>カードを追加</button>
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   );
@@ -1309,7 +1344,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
   const isEdit = !!initial;
   const [name,setName]=useState(initial?.name || "");
   const [isPublic,setIsPublic]=useState(initial?.isPublic ?? true);
-  const [wordLang,setWordLang]=useState(initial?.wordLang || "ja");
+  const [wordLang,setWordLang]=useState(toLanguageInputValue(initial?.wordLang || "ja"));
   const [defLang,setDefLang]=useState(toLanguageInputValue(initial?.defLang || "ja"));
   const [detailLevel,setDetailLevel]=useState(initial?.detailLevel || 2);
   const [tags,setTags]=useState(initial?.tags || []);
@@ -1418,11 +1453,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
           <div style={{ display:"grid", gap:14 }}>
             <label style={{ display:"grid", gap:8 }}>
               <span className="settings-label">単語の言語</span>
-              <select className="settings-select" value={wordLang} onChange={(e)=>setWordLang(e.target.value)}>
-                {LANGUAGES.map((lang)=>(
-                  <option key={lang.code} value={lang.code}>{lang.label}</option>
-                ))}
-              </select>
+              <LanguageInput value={wordLang} onChange={setWordLang} listId="create-word-language-options" includeSpecial />
             </label>
 
             <label style={{ display:"grid", gap:8 }}>
@@ -1473,23 +1504,22 @@ function CreateView({initial,onSave,onBack,showToast}) {
             {cards.map((card,index)=>(
               <div key={card.id} className="card-card">
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                  <strong>カード {index + 1}</strong>
-                  <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
-                </div>
-                <div style={{ display:"grid", gap:8 }}>
-                  <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} placeholder="単語" />
-                  <textarea
-                    className="settings-select"
-                    value={card.definition}
-                    onChange={(e)=>updateCard(card.id,"definition",e.target.value)}
-                    placeholder="定義"
-                    rows={4}
-                    style={{ resize:"vertical" }}
-                  />
-                  <div>
+                  <strong>{index + 1}</strong>
+                  <div style={{ display:"flex", gap:8 }}>
                     <button className="nbtn" onClick={()=>generateCardDefinition(card.id)} disabled={generatingCardId===card.id}>
                       {generatingCardId===card.id ? "生成中..." : "定義を生成"}
                     </button>
+                    <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:0 }}>
+                  <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)" }}>
+                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>用語</div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:16 }}>
+                    <input className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder="定義を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>定義</div>
                   </div>
                 </div>
               </div>
@@ -2040,7 +2070,9 @@ function Styles() {
     ".mode-btn-row{display:flex;gap:12px;flex-wrap:wrap;}",
     ".mode-big-btn{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:20px 22px;background:var(--surface);border:2px solid var(--border);border-radius:var(--r);cursor:pointer;font-family:var(--ff);transition:all .2s;}",
     ".mode-big-btn:hover{border-color:var(--mc,var(--accent));transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.09);}",
-    ".detail-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;margin-top:20px;align-items:start;}",
+    ".test-submenu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}",
+    ".test-submenu-card{background:var(--surface);border-radius:var(--r);padding:28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.15);}",
+    ".detail-layout{display:grid;grid-template-columns:1fr;gap:20px;margin-top:20px;align-items:start;}",
     ".composer-panel{position:sticky;top:84px;}",
     ".terms-list{display:grid;gap:0;}",
     ".term-row{display:grid;grid-template-columns:48px minmax(0,1fr) minmax(0,1fr) auto;gap:16px;align-items:start;padding:18px 0;border-top:1px solid var(--border);}",
@@ -2054,6 +2086,7 @@ function Styles() {
     ".term-edit-panel{display:grid;gap:12px;}",
     ".term-edit-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:10px;}",
     ".composer-form{display:grid;gap:10px;}",
+    ".icon-btn{font-size:18px;padding:6px 8px;min-width:unset;line-height:1;}",
     ".composer-actions{display:grid;gap:10px;}",
     // preview card
     ".preview-card{width:min(500px,100%);height:230px;perspective:1200px;cursor:pointer;margin:0 auto;}",
@@ -2191,7 +2224,7 @@ function Styles() {
     ".rt-btn:hover{background:var(--border);color:var(--text);}",
     ".rt-textarea{flex:1;min-height:70px;padding:10px 14px;outline:none;font-family:var(--ff);font-size:14px;line-height:1.6;color:var(--text);border:none;background:transparent;resize:vertical;width:100%;}",
     ".rt-textarea::placeholder{color:var(--text3);}",
-    "@media(max-width:1100px){.quizlet-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.composer-panel{position:static;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
+    "@media(max-width:1100px){.quizlet-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
     "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:140px;}.term-row{grid-template-columns:1fr;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:1fr;gap:10px;}.navbar-left,.navbar-center,.navbar-right{justify-content:flex-start;}.section-head{align-items:flex-start;flex-direction:column;}}",
     "@media(max-width:640px){.page-shell,.page{padding:0 16px 72px;}.dashboard-title,.set-header-title{max-width:none;}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:18px;}.launch-card strong{font-size:26px;}}",
 

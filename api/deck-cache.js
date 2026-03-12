@@ -66,12 +66,16 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
   return sanitized;
 }
 
-function buildInitialPrompt({ topic, defLang, detailLevel }) {
+function buildInitialPrompt({ topic, wordLang, defLang, detailLevel }) {
   const detailInstructions = detailLevel === 1
     ? "Each definition should be one short sentence."
     : detailLevel === 2
       ? "Each definition should be 2-3 sentences."
       : "Each definition should be detailed and include examples.";
+
+  const wordLangInstruction = wordLang && wordLang !== "technical"
+    ? `Word/term language: ${wordLang} (write each word/term in ${wordLang}).`
+    : "Words/terms should be in the original language commonly used for the topic.";
 
   return [
     `Create a study flashcard deck about: ${topic}`,
@@ -81,18 +85,23 @@ function buildInitialPrompt({ topic, defLang, detailLevel }) {
     "If there are additional must-know terms that do not fit within those 10, you may add up to 5 extra cards.",
     "Only add extra cards when they are clearly essential.",
     "Never return fewer than 10 cards, and never return more than 15 cards.",
+    wordLangInstruction,
     `Definition language: ${defLang}`,
     detailInstructions,
     'Return JSON only: {"deckName":"...","tags":["#tag1","#tag2"],"cards":[{"word":"...","definition":"..."}]}',
   ].join("\n");
 }
 
-function buildContinuationPrompt({ topic, defLang, detailLevel, existingWords }) {
+function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords }) {
   const detailInstructions = detailLevel === 1
     ? "Each definition should be one short sentence."
     : detailLevel === 2
       ? "Each definition should be 2-3 sentences."
       : "Each definition should be detailed and include examples.";
+
+  const wordLangInstruction = wordLang && wordLang !== "technical"
+    ? `Word/term language: ${wordLang} (write each word/term in ${wordLang}).`
+    : "Words/terms should be in the original language commonly used for the topic.";
 
   return [
     `Continue a study flashcard deck about: ${topic}`,
@@ -100,6 +109,7 @@ function buildContinuationPrompt({ topic, defLang, detailLevel, existingWords })
     "Generate 5 to 10 additional cards.",
     "Every new card must be a new term and must not duplicate or paraphrase any existing word.",
     "Only add genuinely useful next-step terms that expand the deck.",
+    wordLangInstruction,
     `Definition language: ${defLang}`,
     detailInstructions,
     'Return JSON only: {"cards":[{"word":"...","definition":"..."}]}',
@@ -176,8 +186,8 @@ async function fetchCachedDeckById(supabase, cacheId) {
   return data?.[0] || null;
 }
 
-async function generateInitialDeck({ topic, defLang, detailLevel }) {
-  const prompt = buildInitialPrompt({ topic, defLang, detailLevel });
+async function generateInitialDeck({ topic, wordLang, defLang, detailLevel }) {
+  const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel });
   const raw = await requestGroqChat({ prompt, maxTokens: 4000 });
   const parsed = parseDeckPayload(raw);
 
@@ -188,8 +198,8 @@ async function generateInitialDeck({ topic, defLang, detailLevel }) {
   };
 }
 
-async function generateContinuationCards({ topic, defLang, detailLevel, existingWords }) {
-  const prompt = buildContinuationPrompt({ topic, defLang, detailLevel, existingWords });
+async function generateContinuationCards({ topic, wordLang, defLang, detailLevel, existingWords }) {
+  const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords });
   const raw = await requestGroqChat({ prompt, maxTokens: 2500 });
   const parsed = parseDeckPayload(raw);
   return sanitizeCards(parsed.cards, 5, 10, existingWords);
@@ -203,6 +213,7 @@ export default async function handler(req, res) {
 
   const action = String(req.body?.action || "initial").trim();
   const topic = String(req.body?.topic || "").trim();
+  const wordLang = normalizeLanguageValue(req.body?.wordLang, "technical");
   const defLang = normalizeLanguageValue(req.body?.defLang);
   const detailLevel = Number(req.body?.detailLevel || 2);
   const userId = String(req.body?.userId || "").trim();
@@ -218,7 +229,7 @@ export default async function handler(req, res) {
     // --- Supabase未設定時: キャッシュ・クレジットなしで直接生成 ---
     if (!supabase) {
       if (action === "initial") {
-        const generated = await generateInitialDeck({ topic, defLang, detailLevel });
+        const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel });
         return res.status(200).json({
           source: "generated",
           remainingCredits: null,
@@ -227,7 +238,7 @@ export default async function handler(req, res) {
             deckName: generated.deckName,
             tags: generated.tags,
             cards: generated.cards,
-            wordLang: "technical",
+            wordLang,
             defLang,
             detailLevel,
           },
@@ -241,6 +252,7 @@ export default async function handler(req, res) {
 
         const continuationCards = await generateContinuationCards({
           topic,
+          wordLang,
           defLang,
           detailLevel,
           existingWords,
@@ -272,7 +284,7 @@ export default async function handler(req, res) {
       }
 
       const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate);
-      const generated = await generateInitialDeck({ topic, defLang, detailLevel });
+      const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel });
 
       const { data, error } = await supabase
         .from("deck_cache")
@@ -282,7 +294,7 @@ export default async function handler(req, res) {
           deck_name: generated.deckName,
           tags: generated.tags,
           cards: generated.cards,
-          word_lang: "technical",
+          word_lang: wordLang,
           def_lang: defLang,
           detail_level: detailLevel,
           created_by_user_id: userId,
@@ -322,6 +334,7 @@ export default async function handler(req, res) {
       const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate);
       const continuationCards = await generateContinuationCards({
         topic: cached.topic || topic,
+        wordLang: cached.word_lang || wordLang,
         defLang: cached.def_lang || defLang,
         detailLevel: cached.detail_level || detailLevel,
         existingWords: mergedExistingWords,
