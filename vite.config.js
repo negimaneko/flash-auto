@@ -204,7 +204,7 @@ async function handleTrackProxy(req, res, supabaseUrl, supabaseKey) {
   let body
   try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'Invalid JSON body' }); return }
 
-  const { anonymousUserId, eventName, metadata } = body || {}
+  const { anonymousUserId, eventName, metadata, isInternal } = body || {}
 
   if (!anonymousUserId || typeof anonymousUserId !== 'string' || anonymousUserId.length > 128) {
     sendJson(res, 400, { error: 'anonymousUserId is required' }); return
@@ -218,12 +218,17 @@ async function handleTrackProxy(req, res, supabaseUrl, supabaseKey) {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
+    const upsertData = {
+      anonymous_user_id: anonymousUserId,
+      last_seen_at: new Date().toISOString(),
+    }
+    if (isInternal === true) {
+      upsertData.is_internal = true
+    }
+
     const { data: user, error: upsertError } = await supabase
       .from('users')
-      .upsert(
-        { anonymous_user_id: anonymousUserId, last_seen_at: new Date().toISOString() },
-        { onConflict: 'anonymous_user_id' }
-      )
+      .upsert(upsertData, { onConflict: 'anonymous_user_id' })
       .select('id')
       .single()
 

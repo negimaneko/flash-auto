@@ -10,6 +10,7 @@
 
 const ANON_ID_KEY = "mnemox_anon_id";
 const LEGACY_KEY = "flash auto-anonymous-user-id"; // 旧キー（スペースあり）移行用
+const INTERNAL_KEY = "mnemox_internal"; // 開発者・内部ユーザー用フラグ
 
 function buildAnonymousUserId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -58,6 +59,37 @@ export function getAnonymousUserId() {
 }
 
 /**
+ * 内部ユーザー（開発者・テスター）かどうかを判定する。
+ * ブラウザのコンソールで localStorage.setItem("mnemox_internal", "true") を実行すると内部ユーザーになる。
+ */
+export function isInternalUser() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(INTERNAL_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 内部ユーザーフラグを設定する（開発者がコンソールから呼ぶ用）。
+ * window.mnemoxMarkInternal() でも呼べるようにする。
+ */
+export function markAsInternal() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(INTERNAL_KEY, "true");
+  } catch {
+    // ignore
+  }
+}
+
+// グローバルに公開（開発者がコンソールから簡単に呼べるように）
+if (typeof window !== "undefined") {
+  window.mnemoxMarkInternal = markAsInternal;
+}
+
+/**
  * イベントをサーバー経由で Supabase に記録する。
  * fire-and-forget: 失敗しても UX に影響しない。
  *
@@ -71,7 +103,12 @@ export async function trackEvent(eventName, metadata = {}) {
     await fetch("/api/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anonymousUserId: userId, eventName, metadata }),
+      body: JSON.stringify({
+        anonymousUserId: userId,
+        eventName,
+        metadata,
+        isInternal: isInternalUser(),
+      }),
     });
   } catch {
     // サイレントに失敗（ユーザーには見せない）

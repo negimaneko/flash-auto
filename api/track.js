@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { anonymousUserId, eventName, metadata } = req.body || {};
+  const { anonymousUserId, eventName, metadata, isInternal } = req.body || {};
 
   // バリデーション
   if (!anonymousUserId || typeof anonymousUserId !== "string" || anonymousUserId.length > 128) {
@@ -58,15 +58,18 @@ export default async function handler(req, res) {
 
   try {
     // users テーブルに upsert（初回 → INSERT / 再訪問 → last_seen_at を更新）
+    const upsertData = {
+      anonymous_user_id: anonymousUserId,
+      last_seen_at: new Date().toISOString(),
+    };
+    // isInternal フラグが true の場合のみ設定（一度 true になったら戻さない）
+    if (isInternal === true) {
+      upsertData.is_internal = true;
+    }
+
     const { data: user, error: upsertError } = await supabase
       .from("users")
-      .upsert(
-        {
-          anonymous_user_id: anonymousUserId,
-          last_seen_at: new Date().toISOString(),
-        },
-        { onConflict: "anonymous_user_id" }
-      )
+      .upsert(upsertData, { onConflict: "anonymous_user_id" })
       .select("id")
       .single();
 

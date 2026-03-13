@@ -661,6 +661,7 @@ export default function App() {
         setView("detail");
       }}/>}
       {view==="quiz"      && activeDeck && <QuizView  deck={syncActive(activeDeck.id)} mode={quizMode} onBack={()=>setView("detail")} onCleared={markCleared} onUpdateStreaks={updateStreaks} showToast={showToast}/>}
+      <FeedbackFab/>
     </div>
   );
 }
@@ -699,8 +700,52 @@ function MobileDrawer({open,onClose,credits,onHome,onLibrary,onGenerate,onNew,ac
             <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
             <span>クレジット残機: <strong>{credits}</strong></span>
           </div>
+          <a className="drawer-feedback" href={FEEDBACK_FORM_URL} target="_blank" rel="noopener noreferrer" onClick={onClose}>
+            💬 ご意見・不具合報告
+          </a>
         </div>
       </nav>
+    </>
+  );
+}
+
+// FEEDBACK FAB
+const FEEDBACK_FORM_URL = "https://forms.gle/PLACEHOLDER";
+
+function FeedbackFab() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="feedback-fab" onClick={() => setOpen(true)} aria-label="フィードバック" type="button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>ご意見</span>
+      </button>
+      {open && (
+        <div className="feedback-overlay" onClick={() => setOpen(false)}>
+          <div className="feedback-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="feedback-close" onClick={() => setOpen(false)}>✕</button>
+            <div className="feedback-modal-icon">💬</div>
+            <h3 className="feedback-modal-title">ご意見・ご感想をお聞かせください</h3>
+            <p className="feedback-modal-desc">
+              Flash Autoをより良くするために、あなたの声を聞かせてください。<br/>
+              使いやすさ・分かりにくかった点・不具合など、なんでもOKです。<br/>
+              <strong>所要時間：約1分</strong>
+            </p>
+            <a
+              className="nbtn accent feedback-modal-btn"
+              href={FEEDBACK_FORM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+            >
+              フィードバックを送る →
+            </a>
+            <button className="nbtn ghost feedback-modal-skip" onClick={() => setOpen(false)}>
+              あとで
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -744,6 +789,10 @@ function AppSidebar({active,onHome,onLibrary,credits}) {
         <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
         <span>クレジット残機: <strong>{credits !== undefined ? credits : "—"}</strong></span>
       </div>
+
+      <a className="sidebar-feedback" href={FEEDBACK_FORM_URL} target="_blank" rel="noopener noreferrer">
+        💬 ご意見・不具合報告
+      </a>
     </aside>
   );
 }
@@ -2905,6 +2954,23 @@ function Styles() {
     ".mastery-header{font-size:16px;font-weight:700;color:var(--text);text-align:center;}",
     ".mastery-sub{font-size:13px;color:var(--text3);text-align:center;margin-top:4px;}",
     ".mastery-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:var(--green-dim);color:var(--green);vertical-align:middle;}",
+    // feedback fab & modal
+    ".feedback-fab{position:fixed;bottom:24px;right:24px;z-index:900;display:flex;align-items:center;gap:6px;padding:10px 18px;border-radius:40px;border:none;background:var(--accent);color:#fff;font-family:var(--ff);font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(13,148,136,.35);transition:all .2s;}",
+    ".feedback-fab:hover{background:var(--accent2);box-shadow:0 6px 24px rgba(13,148,136,.45);transform:translateY(-2px);}",
+    ".feedback-fab svg{flex-shrink:0;}",
+    ".feedback-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1100;padding:20px;}",
+    ".feedback-modal{background:var(--surface);border-radius:var(--r);padding:32px 28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.18);text-align:center;position:relative;}",
+    ".feedback-close{position:absolute;top:14px;right:14px;background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;}",
+    ".feedback-close:hover{background:var(--surface2);color:var(--text);}",
+    ".feedback-modal-icon{font-size:40px;margin-bottom:12px;}",
+    ".feedback-modal-title{margin:0 0 12px;font-size:18px;font-weight:700;color:var(--text);}",
+    ".feedback-modal-desc{margin:0 0 20px;font-size:14px;color:var(--text2);line-height:1.7;}",
+    ".feedback-modal-btn{display:inline-flex;width:100%;justify-content:center;padding:13px 24px;font-size:15px;text-decoration:none;}",
+    ".feedback-modal-skip{width:100%;margin-top:10px;}",
+    ".sidebar-feedback{display:block;margin:12px 16px 16px;padding:10px 14px;border-radius:var(--r-sm);font-size:13px;color:var(--text2);text-decoration:none;text-align:center;transition:all .15s;border:1px dashed var(--border);}",
+    ".sidebar-feedback:hover{background:var(--accent-dim);color:var(--accent);border-color:var(--accent);}",
+    ".drawer-feedback{display:block;margin:12px 0 0;padding:12px 16px;border-radius:var(--r-sm);font-size:14px;color:var(--text2);text-decoration:none;text-align:center;border:1px dashed var(--border);transition:all .15s;}",
+    ".drawer-feedback:hover{background:var(--accent-dim);color:var(--accent);border-color:var(--accent);}",
     // toast
     ".toast-popup{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);font-family:var(--ff);font-size:14px;font-weight:600;padding:11px 26px;border-radius:40px;z-index:9999;}",
     ".tp-ok{background:var(--accent);color:#fff;}",
@@ -2933,6 +2999,8 @@ function Styles() {
     "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.hamburger-btn{display:flex;}.choice-grid{grid-template-columns:1fr 1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
     // --- mobile-small ---
     "@media(max-width:640px){.page-shell,.page{padding:0 12px 72px;}.dashboard-title,.set-header-title{max-width:none;font-size:clamp(24px,6vw,36px);}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:14px 16px;}.launch-card strong{font-size:22px;}.launch-card{padding:18px 16px 16px;}.launch-card span{font-size:13px;}.dashboard-hero{padding:18px 16px;border-radius:20px;}.set-header-card{padding:18px 16px;border-radius:20px;margin-top:16px;gap:16px;}.section-heading{font-size:22px;}.dashboard-copy,.set-header-copy{font-size:14px;}.stat-chip{padding:10px 12px;}.stat-chip strong{font-size:20px;}.nbtn{padding:8px 14px;font-size:13px;}.credit-badge{padding:6px 10px;font-size:12px;}.set-meta-card strong{font-size:16px;}.set-meta-card span{font-size:11px;}.set-meta-card{padding:10px 12px;}.mode-grid{grid-template-columns:1fr;}.mode-big-btn{padding:16px 18px;}.quiz-card{padding:28px 20px;height:180px;}.choice-grid{grid-template-columns:1fr;}.flip-card{width:min(620px,calc(100vw - 32px));height:min(360px,60vh);}.detail-flip-card{width:min(520px,calc(100vw - 32px));height:min(300px,55vh);}.flip-view-body{padding:20px 12px;gap:20px;}.quiz-body{padding:12px;gap:10px;}.study-wrap{padding:20px 12px;gap:16px;}.result-summary-card{padding:24px 18px;}.filter-tabs{width:100%;}.ftab{flex:1;text-align:center;padding:7px 12px;}.test-submenu-card{padding:22px 18px;}.gen-input-row{padding:10px;}.gen-messages{padding:14px;}.gen-preview-panel{padding:14px;}.study-set-title{font-size:18px;}.study-set-meta{font-size:13px;}.study-set-card{border-radius:18px;}.terms-panel{padding:18px 14px;}.term-index{width:30px;height:30px;font-size:11px;border-radius:9px;}.term-value{font-size:14px;}.create-name-input{font-size:20px;}.settings-card{padding:14px 16px;}.card-card{padding:16px;}.hero-panel,.card-card,.terms-panel,.composer-panel{border-radius:18px;}.study-nav{padding:10px 14px;}.flip-nav-row{gap:20px;}.result-donut-row{gap:20px;flex-wrap:wrap;}}",
+    // --- feedback fab mobile ---
+    "@media(max-width:640px){.feedback-fab{bottom:18px;right:14px;padding:9px 14px;font-size:12px;}.feedback-fab span{display:none;}.feedback-modal{padding:24px 18px;}}",
     // --- extra-small (iPhone SE etc) ---
     "@media(max-width:380px){.page-shell,.page{padding:0 8px 64px;}.dashboard-hero{padding:14px 12px;}.set-header-card{padding:14px 12px;}.launch-card strong{font-size:18px;}.launch-card span{font-size:12px;}.nbtn{padding:7px 10px;font-size:12px;}.flip-card{height:min(320px,55vh);}.detail-flip-card{height:min(260px,50vh);}.navbar{padding:8px 10px;}.credit-badge{padding:5px 8px;font-size:11px;}}",
 
