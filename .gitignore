@@ -5,3 +5,5 @@ dist/
 .vercel
 .env*.local
 .env.local
+.claude/
+.nano-banana-config.json
