@@ -328,13 +328,13 @@ async function callAI(prompt, maxTokens = 1024) {
       attemptCount++;
       if (ep === endpoints[endpoints.length - 1]) {
         console.error("[callAI] All providers failed:", JSON.stringify(errors));
-        throw new Error("すべてのAIサービスに接続できませんでした。しばらく待ってからもう一度お試しください。");
+        throw new Error("AIに接続できませんでした。しばらくしてから再試行してください。");
       }
     }
   }
 
   console.error("[callAI] Exhausted all endpoints:", JSON.stringify(errors));
-  throw new Error("すべてのAIサービスに接続できませんでした。しばらく待ってからもう一度お試しください。");
+  throw new Error("AIに接続できませんでした。しばらくしてから再試行してください。");
 }
 
 async function fetchDeckFromCacheOrGenerate(payload) {
