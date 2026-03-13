@@ -101,7 +101,7 @@ const WORD_COUNTS = [
 ];
 
 const SPLASH_DURATION_MS = 2000;
-const SPLASH_LOGO_SRC = "";
+const SPLASH_LOGO_SRC = "/icon.png";
 const SPLASH_LOGO_ALT = "flash auto";
 
 function getDeckTheme(deck) {
@@ -298,6 +298,8 @@ async function aiSuggest({term,wordLang,defLang,detailLevel,deckName,otherWords}
         `Deck: ${deckName || "Untitled"}`,
         context ? `Related words: ${context}` : "",
         lvl.id === 1 ? "Return one short sentence." : lvl.id === 2 ? "Return 2-3 sentences." : "Return 4-6 sentences with examples.",
+        `Use assertive, dictionary-style tone (断定・体言止め). Never use polite form (ですます調). Example: "〜すること。" "〜を指す。" "〜の手法。"`,
+        `Do NOT start with the term name or "〜とは". Start directly with the definition content. For example, instead of "パーソンセンタードセラピーとは、カール・ロジャーズが..." write "カール・ロジャーズが..."`,
         "Return the definition only.",
       ].filter(Boolean).join("\n")
     : [
@@ -396,12 +398,15 @@ function SplashScreen() {
     <div className="splash-screen" aria-label="flash auto スプラッシュスクリーン">
       <div className="splash-mark">
         {showImage ? (
-          <img
-            className="splash-logo-image"
-            src={SPLASH_LOGO_SRC}
-            alt={SPLASH_LOGO_ALT}
-            onError={() => setLogoFailed(true)}
-          />
+          <>
+            <img
+              className="splash-logo-image"
+              src={SPLASH_LOGO_SRC}
+              alt={SPLASH_LOGO_ALT}
+              onError={() => setLogoFailed(true)}
+            />
+            <span className="splash-logo-text">flash auto</span>
+          </>
         ) : (
           <span className="splash-logo-text">flash auto</span>
         )}
@@ -535,7 +540,7 @@ function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
   return (
     <aside className="app-sidebar">
       <div className="sidebar-brand">
-        <div className="sidebar-brand-mark">M</div>
+        <div className="sidebar-brand-mark">F</div>
         <div>
           <div className="sidebar-brand-title">Flash Auto</div>
           <div className="sidebar-brand-sub">学習セット</div>
@@ -2095,10 +2100,10 @@ function Styles() {
     ":root{--bg:#f0f2f8;--surface:#fff;--surface2:#f4f6fb;--surface3:#e8ebf4;--border:#e0e4f0;--border2:#c8ceea;--accent:#6c63ff;--accent2:#5a52e0;--accent-dim:rgba(108,99,255,.1);--coral:#ff6b6b;--coral-dim:rgba(255,107,107,.1);--red:#ef4444;--red-dim:rgba(239,68,68,.1);--green:#22c55e;--green-dim:rgba(34,197,94,.1);--text:#1e1b4b;--text2:#6b7280;--text3:#9ca3af;--ff:'Outfit','Noto Sans JP',sans-serif;--r:16px;--r-sm:10px;--shadow:0 4px 20px rgba(108,99,255,.12);--shadow-lg:0 8px 40px rgba(108,99,255,.18);}",
     "html,body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh;}",
     ".app{min-height:100vh;background:var(--bg);}",
-    ".splash-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at top,#eef2ff 0%,#f8fafc 45%,#e2e8f0 100%);}",
-    ".splash-mark{display:flex;align-items:center;justify-content:center;min-width:min(80vw,420px);min-height:180px;padding:32px 40px;border-radius:32px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.85);box-shadow:0 24px 60px rgba(15,23,42,.12);backdrop-filter:blur(16px);}",
-    ".splash-logo-text{font-family:'Outfit','Noto Sans JP',sans-serif;font-size:clamp(42px,8vw,78px);font-weight:800;letter-spacing:.08em;text-transform:lowercase;color:var(--text);}",
-    ".splash-logo-image{display:block;max-width:min(72vw,320px);max-height:140px;object-fit:contain;}",
+    ".splash-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#0f1e3a;}",
+    ".splash-mark{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}",
+    ".splash-logo-text{font-family:'Outfit','Noto Sans JP',sans-serif;font-size:clamp(32px,6vw,56px);font-weight:800;letter-spacing:.08em;text-transform:lowercase;color:#fff;}",
+    ".splash-logo-image{display:block;width:min(60vw,200px);height:min(60vw,200px);object-fit:contain;border-radius:28px;}",
     // navbar
     ".navbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:14px 24px;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;}",
     ".navbar-left{display:flex;align-items:center;}",
