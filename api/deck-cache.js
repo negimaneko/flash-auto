@@ -1,13 +1,8 @@
 import { requestGroqChat } from "./_shared/groq.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
+import { handlePreflight, setCors } from "./_shared/cors.js";
 
 const DAILY_CREDIT_LIMIT = Number(process.env.AI_GENERATE_DAILY_LIMIT || 3);
-
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
 
 function normalizeLanguageValue(value, fallback = "ja") {
   const text = String(value ?? "").trim();
@@ -206,9 +201,9 @@ async function generateContinuationCards({ topic, wordLang, defLang, detailLevel
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  if (handlePreflight(req, res)) return;
+  setCors(req, res);
 
-  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const action = String(req.body?.action || "initial").trim();
