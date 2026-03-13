@@ -20,7 +20,9 @@ export async function requestGroqChat({ prompt, maxTokens = 1024 }) {
 
   const data = await response.json();
   if (!response.ok || data.error) {
-    throw new Error(data.error?.message || "Groq request failed");
+    const errMsg = data.error?.message || "Groq request failed";
+    console.error("[Groq API] error:", response.status, errMsg);
+    throw new Error(errMsg);
   }
 
   const text = data.choices?.[0]?.message?.content || "";

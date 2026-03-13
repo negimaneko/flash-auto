@@ -63,9 +63,9 @@ export async function handleOllamaRequest(req, res) {
 
     return res.status(200).json({ text, model });
   } catch (error) {
-    return res.status(503).json({
-      error: error instanceof Error ? error.message : "Ollama is unavailable",
-    });
+    const message = error instanceof Error ? error.message : "Ollama is unavailable";
+    console.error("[/api/ollama] error:", message);
+    return res.status(503).json({ error: message });
   }
 }
 

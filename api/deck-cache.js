@@ -365,6 +365,7 @@ export default async function handler(req, res) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load deck cache";
     const status = /今日のクレジット/.test(message) ? 429 : 500;
+    console.error(`[/api/deck-cache] ${status} error:`, message);
     return res.status(status).json({ error: message });
   }
 }

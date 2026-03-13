@@ -14,6 +14,8 @@ export default async function handler(req, res) {
     const text = await requestGroqChat({ prompt, maxTokens: maxTokens || 1024 });
     return res.status(200).json({ text });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("[/api/groq] error:", message);
+    return res.status(500).json({ error: message });
   }
 }
