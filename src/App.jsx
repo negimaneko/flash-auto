@@ -116,10 +116,10 @@ const SEED_DECKS = [
     favorited: false,
     favCount: 12,
     cards: [
-      { id: "s1a", word: "CPU", definition: "Central Processing Unitの略で、計算や命令の実行を担当するコンピュータの中核部品です。" },
-      { id: "s1b", word: "RAM", definition: "作業中のデータを一時的に保存するメモリです。電源を切ると内容は消えます。" },
-      { id: "s1c", word: "Algorithm", definition: "問題を解くための手順や規則のまとまりです。プログラムの処理方法を決める考え方です。" },
-      { id: "s1d", word: "API", definition: "ソフトウェア同士が機能やデータをやり取りするための接続ルールです。" },
+      { id: "s1a", word: "CPU", definition: "計算や命令の実行を担当するコンピュータの中核部品。Central Processing Unitの略。" },
+      { id: "s1b", word: "RAM", definition: "作業中のデータを一時的に保存するメモリ。電源を切ると内容は消える。" },
+      { id: "s1c", word: "Algorithm", definition: "問題を解くための手順・規則のまとまり。プログラムの処理方法を定義する概念。" },
+      { id: "s1d", word: "API", definition: "ソフトウェア同士が機能やデータをやり取りするための接続規約。" },
     ],
   },
   {
@@ -136,10 +136,10 @@ const SEED_DECKS = [
     favorited: false,
     favCount: 8,
     cards: [
-      { id: "s2a", word: "ephemeral", definition: "ごく短い時間しか続かないことを表します。" },
-      { id: "s2b", word: "ubiquitous", definition: "どこにでも存在している、非常に広く見られるという意味です。" },
-      { id: "s2c", word: "paradigm", definition: "物事の見方や考え方の枠組みを指します。" },
-      { id: "s2d", word: "resilience", definition: "困難や失敗から立ち直る力、回復力のことです。" },
+      { id: "s2a", word: "ephemeral", definition: "ごく短い時間しか続かないさま。一時的・はかないことを指す形容詞。" },
+      { id: "s2b", word: "ubiquitous", definition: "どこにでも存在し、非常に広く見られる状態。遍在する。" },
+      { id: "s2c", word: "paradigm", definition: "物事の見方や考え方の枠組み。ある時代・分野における支配的な思考モデル。" },
+      { id: "s2d", word: "resilience", definition: "困難や失敗から立ち直る力。回復力・復元力を指す。" },
     ],
   },
   {
@@ -156,9 +156,9 @@ const SEED_DECKS = [
     favorited: false,
     favCount: 5,
     cards: [
-      { id: "s3a", word: "Hypothesis", definition: "観察や実験で確かめるために立てる仮説のことです。" },
-      { id: "s3b", word: "Variable", definition: "変化する値や条件を表す要素です。" },
-      { id: "s3c", word: "Observation", definition: "対象を注意深く見て事実や変化を記録することです。" },
+      { id: "s3a", word: "Hypothesis", definition: "観察や実験によって検証すべき仮説。科学的探究の出発点となる命題。" },
+      { id: "s3b", word: "Variable", definition: "変化しうる値や条件を表す要素。数式やプログラムで変動する量を指す。" },
+      { id: "s3c", word: "Observation", definition: "対象を注意深く見て事実や変化を記録する行為。科学的手法の基本ステップ。" },
     ],
   },
 ];
@@ -420,7 +420,20 @@ function SplashScreen() {
 }
 
 export default function App() {
-  const [decks, setDecks] = useState(() => normalizeDecks(SEED_DECKS));
+  const [decks, setDecks] = useState(() => {
+    try {
+      const saved = localStorage.getItem("mnemox_decks");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return normalizeDecks(parsed);
+        }
+      }
+    } catch (e) {
+      // データが壊れていた場合は無視してサンプルで起動
+    }
+    return normalizeDecks(SEED_DECKS);
+  });
   const [view, setView] = useState("home");
   const [activeDeck, setActiveDeck] = useState(null);
   const [editDeck, setEditDeck] = useState(null);
@@ -446,6 +459,15 @@ export default function App() {
     const timerId = setTimeout(() => setShowSplash(false), SPLASH_DURATION_MS);
     return () => clearTimeout(timerId);
   }, []);
+
+  // decksが変わるたびにlocalStorageに保存
+  useEffect(() => {
+    try {
+      localStorage.setItem("mnemox_decks", JSON.stringify(decks));
+    } catch (e) {
+      // 容量オーバーなどで保存できなくても、アプリは止めない
+    }
+  }, [decks]);
 
   const showToast = useCallback((msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);},[]);
   const goHome = () => { setView("home"); setActiveDeck(null); setEditDeck(null); };
@@ -856,7 +878,7 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
       </div>
       <div className="study-set-content">
         <div className="study-set-topline">
-          <span className="study-set-type">{deck.isPublic ? "公開セット" : "マイセット"}</span>
+          <span className="study-set-type">{deck.author === "サンプル" ? "サンプルセット" : deck.isPublic ? "公開セット" : "マイセット"}</span>
           <div className="tile-fav-wrap">
             <button className={"fav-btn study-fav-btn"+(deck.favorited?" fav-on":"")} onClick={onFav}><svg width="28" height="28" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></button>
             {(deck.favCount||0)>0 && <span className="fav-count">{deck.favCount}</span>}
@@ -1461,7 +1483,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
 
       <section className="set-header-card">
         <div className="set-header-main">
-          <div className="section-kicker">{deck.isPublic ? "公開セット" : "マイセット"}</div>
+          <div className="section-kicker">{deck.author === "サンプル" ? "サンプルセット" : deck.isPublic ? "公開セット" : "マイセット"}</div>
           <h1 className="set-header-title">{deck.name}</h1>
           <p className="set-header-copy">セット概要を確認してから、フラッシュカードかクイズにすぐ入れる構成です。</p>
           <div className="set-meta-grid">
@@ -1908,7 +1930,7 @@ function FlipView({deck,onBack}) {
         <button className="nbtn ghost" onClick={onBack}>← 戻る</button>
         <span className="study-deck-title">{deck.name}</span>
         <button className="mode-switch-btn" onClick={() => { setFrontIsWord((f) => !f); setFlipped(false); }}>
-          {frontIsWord ? "単語が表" : "定義が表"}
+          {frontIsWord ? "🔄 単語が表" : "🔄 定義が表"}
         </button>
       </div>
 
@@ -2719,8 +2741,8 @@ function Styles() {
     ".study-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:32px 20px;gap:20px;max-width:660px;margin:0 auto;width:100%;}",
     ".study-progress{font-size:14px;font-weight:700;color:var(--text2);}",
     ".quiz-body{flex:1;display:flex;flex-direction:column;align-items:center;padding:16px 16px;gap:12px;max-width:700px;margin:0 auto;width:100%;}",
-    ".quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:40px 32px;text-align:center;width:100%;min-height:160px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);}",
-    ".quiz-card .fc-text{font-size:clamp(22px,5vw,38px);}",
+    ".quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px 28px;text-align:center;width:100%;height:300px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);overflow-y:auto;}",
+    ".quiz-card .fc-text{font-size:clamp(18px,4vw,32px);}",
     ".quiz-dir-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:16px;max-width:520px;margin:0 auto;width:100%;}",
     ".quiz-dir-title{font-size:22px;font-weight:800;color:var(--text);margin:0;}",
     ".quiz-dir-sub{font-size:14px;color:var(--text3);margin:0;}",
@@ -2767,7 +2789,7 @@ function Styles() {
     ".fc-nav.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".quiz-stage{flex:1;display:flex;flex-direction:column;align-items:center;padding:28px 20px;gap:18px;max-width:660px;margin:0 auto;width:100%;}",
     ".choice-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;}",
-    ".choice-btn{padding:20px 16px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--ff);font-size:15px;color:var(--text);cursor:pointer;text-align:center;line-height:1.5;transition:all .18s;min-height:80px;display:flex;align-items:center;justify-content:center;}",
+    ".choice-btn{padding:16px 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;color:var(--text);cursor:pointer;text-align:center;line-height:1.5;transition:all .18s;height:90px;display:flex;align-items:center;justify-content:center;overflow-y:auto;}",
     ".choice-btn:hover{border-color:var(--accent);background:var(--accent-dim);}",
     ".c-correct{border-color:var(--green)!important;background:var(--green-dim)!important;color:var(--green)!important;font-weight:700;}",
     ".c-wrong{border-color:var(--red)!important;background:var(--red-dim)!important;color:var(--red)!important;}",
@@ -2823,9 +2845,9 @@ function Styles() {
     // --- tablet ---
     "@media(max-width:1100px){.app-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
     // --- mobile-medium ---
-    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.hamburger-btn{display:flex;}.choice-grid{grid-template-columns:1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
+    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.hamburger-btn{display:flex;}.choice-grid{grid-template-columns:1fr 1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
     // --- mobile-small ---
-    "@media(max-width:640px){.page-shell,.page{padding:0 12px 72px;}.dashboard-title,.set-header-title{max-width:none;font-size:clamp(24px,6vw,36px);}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:14px 16px;}.launch-card strong{font-size:22px;}.launch-card{padding:18px 16px 16px;}.launch-card span{font-size:13px;}.dashboard-hero{padding:18px 16px;border-radius:20px;}.set-header-card{padding:18px 16px;border-radius:20px;margin-top:16px;gap:16px;}.section-heading{font-size:22px;}.dashboard-copy,.set-header-copy{font-size:14px;}.stat-chip{padding:10px 12px;}.stat-chip strong{font-size:20px;}.nbtn{padding:8px 14px;font-size:13px;}.credit-badge{padding:6px 10px;font-size:12px;}.set-meta-card strong{font-size:16px;}.set-meta-card span{font-size:11px;}.set-meta-card{padding:10px 12px;}.mode-grid{grid-template-columns:1fr;}.mode-big-btn{padding:16px 18px;}.quiz-card{padding:28px 20px;min-height:120px;}.flip-card{width:min(620px,calc(100vw - 32px));height:min(360px,60vh);}.detail-flip-card{width:min(520px,calc(100vw - 32px));height:min(300px,55vh);}.flip-view-body{padding:20px 12px;gap:20px;}.quiz-body{padding:12px;gap:10px;}.study-wrap{padding:20px 12px;gap:16px;}.result-summary-card{padding:24px 18px;}.filter-tabs{width:100%;}.ftab{flex:1;text-align:center;padding:7px 12px;}.test-submenu-card{padding:22px 18px;}.gen-input-row{padding:10px;}.gen-messages{padding:14px;}.gen-preview-panel{padding:14px;}.study-set-title{font-size:18px;}.study-set-meta{font-size:13px;}.study-set-card{border-radius:18px;}.terms-panel{padding:18px 14px;}.term-index{width:30px;height:30px;font-size:11px;border-radius:9px;}.term-value{font-size:14px;}.create-name-input{font-size:20px;}.settings-card{padding:14px 16px;}.card-card{padding:16px;}.hero-panel,.card-card,.terms-panel,.composer-panel{border-radius:18px;}.study-nav{padding:10px 14px;}.flip-nav-row{gap:20px;}.result-donut-row{gap:20px;flex-wrap:wrap;}}",
+    "@media(max-width:640px){.page-shell,.page{padding:0 12px 72px;}.dashboard-title,.set-header-title{max-width:none;font-size:clamp(24px,6vw,36px);}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:14px 16px;}.launch-card strong{font-size:22px;}.launch-card{padding:18px 16px 16px;}.launch-card span{font-size:13px;}.dashboard-hero{padding:18px 16px;border-radius:20px;}.set-header-card{padding:18px 16px;border-radius:20px;margin-top:16px;gap:16px;}.section-heading{font-size:22px;}.dashboard-copy,.set-header-copy{font-size:14px;}.stat-chip{padding:10px 12px;}.stat-chip strong{font-size:20px;}.nbtn{padding:8px 14px;font-size:13px;}.credit-badge{padding:6px 10px;font-size:12px;}.set-meta-card strong{font-size:16px;}.set-meta-card span{font-size:11px;}.set-meta-card{padding:10px 12px;}.mode-grid{grid-template-columns:1fr;}.mode-big-btn{padding:16px 18px;}.quiz-card{padding:28px 20px;height:180px;}.choice-grid{grid-template-columns:1fr;}.flip-card{width:min(620px,calc(100vw - 32px));height:min(360px,60vh);}.detail-flip-card{width:min(520px,calc(100vw - 32px));height:min(300px,55vh);}.flip-view-body{padding:20px 12px;gap:20px;}.quiz-body{padding:12px;gap:10px;}.study-wrap{padding:20px 12px;gap:16px;}.result-summary-card{padding:24px 18px;}.filter-tabs{width:100%;}.ftab{flex:1;text-align:center;padding:7px 12px;}.test-submenu-card{padding:22px 18px;}.gen-input-row{padding:10px;}.gen-messages{padding:14px;}.gen-preview-panel{padding:14px;}.study-set-title{font-size:18px;}.study-set-meta{font-size:13px;}.study-set-card{border-radius:18px;}.terms-panel{padding:18px 14px;}.term-index{width:30px;height:30px;font-size:11px;border-radius:9px;}.term-value{font-size:14px;}.create-name-input{font-size:20px;}.settings-card{padding:14px 16px;}.card-card{padding:16px;}.hero-panel,.card-card,.terms-panel,.composer-panel{border-radius:18px;}.study-nav{padding:10px 14px;}.flip-nav-row{gap:20px;}.result-donut-row{gap:20px;flex-wrap:wrap;}}",
     // --- extra-small (iPhone SE etc) ---
     "@media(max-width:380px){.page-shell,.page{padding:0 8px 64px;}.dashboard-hero{padding:14px 12px;}.set-header-card{padding:14px 12px;}.launch-card strong{font-size:18px;}.launch-card span{font-size:12px;}.nbtn{padding:7px 10px;font-size:12px;}.flip-card{height:min(320px,55vh);}.detail-flip-card{height:min(260px,50vh);}.navbar{padding:8px 10px;}.credit-badge{padding:5px 8px;font-size:11px;}}",
 
