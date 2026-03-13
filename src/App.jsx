@@ -1999,9 +1999,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
 
       <div className="study-wrap">
         <div className="quiz-card">
-          <div className="fc-label">単語</div>
           <div className="fc-text">{current?.word || "-"}</div>
-          <div className="fc-hint">{mode === "choice" ? "4択で答えてください。" : "定義を入力してください。"}</div>
         </div>
 
         {mode === "choice" ? (
