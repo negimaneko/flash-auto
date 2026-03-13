@@ -1221,6 +1221,13 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
     }
   };
 
+  const [previewIdx, setPreviewIdx] = useState(0);
+  const [previewFlipped, setPreviewFlipped] = useState(false);
+
+  const previewCard = deck.cards[previewIdx] || deck.cards[0];
+  const previewPrev = () => { if (previewIdx > 0) { setPreviewFlipped(false); setPreviewIdx(i => i - 1); } };
+  const previewNext = () => { if (previewIdx < deck.cards.length - 1) { setPreviewFlipped(false); setPreviewIdx(i => i + 1); } };
+
   const [testSubMenu, setTestSubMenu] = useState(false);
   const modes=[
     { id:"flip", label:"フラッシュカード", desc:"1枚ずつカードをめくって確認します。", color:"#22c55e" },
@@ -1267,6 +1274,48 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
           <button className="nbtn ghost" onClick={()=>onStartMode("quiz-choice")}>4択クイズ</button>
           <button className="nbtn ghost" onClick={()=>onStartMode("quiz-write")}>記述クイズ</button>
           <button className="nbtn ghost" style={{ borderColor: "#8b5cf6", color: "#8b5cf6" }} onClick={()=>setTestSubMenu(true)}>テスト</button>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <div className="section-head">
+          <div>
+            <div className="section-kicker">プレビュー</div>
+            <h2 className="section-heading">単語カード</h2>
+          </div>
+        </div>
+        <div className="detail-flip-area">
+          <button
+            type="button"
+            className={"detail-flip-card" + (previewFlipped ? " flipped" : "")}
+            onClick={() => setPreviewFlipped(v => !v)}
+          >
+            <div className="detail-flip-inner">
+              <div className="detail-flip-face detail-flip-front">
+                <div className="detail-flip-text">{previewCard?.word || "-"}</div>
+              </div>
+              <div className="detail-flip-face detail-flip-back">
+                <div className="detail-flip-text">{previewCard?.definition || "-"}</div>
+              </div>
+            </div>
+          </button>
+          <div className="detail-flip-nav">
+            <button
+              className={"flip-arrow-btn" + (previewIdx === 0 ? " disabled" : "")}
+              onClick={previewPrev}
+              disabled={previewIdx === 0}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="flip-counter">{previewIdx + 1} / {deck.cards.length}</span>
+            <button
+              className={"flip-arrow-btn" + (previewIdx === deck.cards.length - 1 ? " disabled" : "")}
+              onClick={previewNext}
+              disabled={previewIdx === deck.cards.length - 1}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -2377,6 +2426,16 @@ function Styles() {
     ".study-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--coral));transition:width .35s ease;}",
     ".mode-switch-btn{font-family:var(--ff);font-size:13px;font-weight:600;padding:6px 13px;border-radius:var(--r-sm);background:var(--surface2);border:1.5px solid var(--border);color:var(--text2);cursor:pointer;}",
     ".flip-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:26px;}",
+    ".detail-flip-area{display:flex;flex-direction:column;align-items:center;gap:20px;padding:8px 0 16px;}",
+    ".detail-flip-card{width:min(520px,90vw);height:300px;perspective:1200px;cursor:pointer;border:none;background:none;padding:0;outline:none;}",
+    ".detail-flip-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1);}",
+    ".detail-flip-card.flipped .detail-flip-inner{transform:rotateY(180deg);}",
+    ".detail-flip-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;display:flex;align-items:center;justify-content:center;padding:36px;box-shadow:0 4px 24px rgba(0,0,0,.1);}",
+    ".detail-flip-front{background:var(--surface);border:1.5px solid var(--border);}",
+    ".detail-flip-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#7c3aed);}",
+    ".detail-flip-text{font-size:clamp(18px,4vw,32px);font-weight:700;text-align:center;color:var(--text);line-height:1.5;word-break:break-word;overflow-y:auto;max-height:100%;}",
+    ".detail-flip-back .detail-flip-text{color:#fff;}",
+    ".detail-flip-nav{display:flex;align-items:center;gap:28px;justify-content:center;}",
     ".flip-view-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:28px;max-width:720px;margin:0 auto;width:100%;}",
     ".flip-card{width:min(620px,92vw);height:360px;perspective:1200px;cursor:pointer;border:none;background:none;padding:0;outline:none;transition:opacity .2s;}",
     ".flip-card.slide-left{opacity:0;transform:translateX(40px);}",
