@@ -533,7 +533,7 @@ function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
   const items = [
     { id: "home", label: "ホーム", action: onHome },
     { id: "library", label: "公開ライブラリ", action: onLibrary },
-    { id: "generate", label: "AI生成", action: onGenerate },
+    { id: "generate", label: "AI作成", action: onGenerate },
     { id: "create", label: "新規作成", action: onNew },
   ].filter((item)=>typeof item.action === "function");
 
@@ -898,8 +898,8 @@ function GenerateView({onSave,onBack,showToast}) {
   return (
     <div className="page-shell">
       <Navbar
-        left={<button className="nav-btn" onClick={onBack}>戻る</button>}
-        center={<div className="nav-title">AI生成</div>}
+        left={<button className="nbtn ghost" onClick={onBack}>戻る</button>}
+        center={<div className="nav-title">AI作成</div>}
       />
 
       <div className="hero-panel">
@@ -1548,11 +1548,11 @@ function CreateView({initial,onSave,onBack,showToast}) {
         right={<button className="nbtn primary" onClick={handleSave}>保存</button>}
       />
 
-      <div style={{ maxWidth:800, margin:"0 auto", padding:"36px 0 100px" }}>
+      <div style={{ maxWidth:800, margin:"0 auto", padding:"24px 0 100px" }}>
         <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} />
 
         <div className="settings-card">
-          <div style={{ display:"grid", gap:14, gridTemplateColumns:"1fr 1fr" }}>
+          <div className="create-lang-grid">
             <label style={{ display:"grid", gap:8 }}>
               <span className="settings-label">単語の言語</span>
               <LanguageInput value={wordLang} onChange={setWordLang} includeSpecial />
@@ -1618,7 +1618,7 @@ function CreateView({initial,onSave,onBack,showToast}) {
                   <strong>{index + 1}</strong>
                   <button className="nbtn danger" onClick={()=>deleteCard(card.id)}>削除</button>
                 </div>
-                <div style={{ display:"flex", gap:0, alignItems:"stretch" }}>
+                <div className="create-card-fields">
                   <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)", display:"flex", flexDirection:"column" }}>
                     <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
                     <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>用語</div>
@@ -2180,8 +2180,8 @@ function Styles() {
     "@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap');",
     "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}",
     ":root{--bg:#f0f2f8;--surface:#fff;--surface2:#f4f6fb;--surface3:#e8ebf4;--border:#e0e4f0;--border2:#c8ceea;--accent:#6c63ff;--accent2:#5a52e0;--accent-dim:rgba(108,99,255,.1);--coral:#ff6b6b;--coral-dim:rgba(255,107,107,.1);--red:#ef4444;--red-dim:rgba(239,68,68,.1);--green:#22c55e;--green-dim:rgba(34,197,94,.1);--text:#1e1b4b;--text2:#6b7280;--text3:#9ca3af;--ff:'Outfit','Noto Sans JP',sans-serif;--r:16px;--r-sm:10px;--shadow:0 4px 20px rgba(108,99,255,.12);--shadow-lg:0 8px 40px rgba(108,99,255,.18);}",
-    "html,body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh;}",
-    ".app{min-height:100vh;background:var(--bg);}",
+    "html,body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh;overflow-x:hidden;-webkit-text-size-adjust:100%;}",
+    ".app{min-height:100vh;background:var(--bg);overflow-x:hidden;}",
     ".splash-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#0f1e3a;}",
     ".splash-mark{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}",
     ".splash-logo-text{font-family:'Outfit','Noto Sans JP',sans-serif;font-size:clamp(32px,6vw,56px);font-weight:800;letter-spacing:.08em;text-transform:lowercase;color:#fff;}",
@@ -2394,6 +2394,10 @@ function Styles() {
     ".add-card-btn{width:100%;padding:14px;margin-top:4px;background:transparent;border:2px dashed var(--border2);border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;font-weight:600;color:var(--text3);cursor:pointer;}",
     ".add-card-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}",
     // create form
+    ".create-lang-grid{display:grid;gap:14px;grid-template-columns:1fr 1fr;}",
+    "@media(max-width:480px){.create-lang-grid{grid-template-columns:1fr;}}",
+    ".create-card-fields{display:flex;gap:0;align-items:stretch;}",
+    "@media(max-width:480px){.create-card-fields{flex-direction:column;gap:12px;}.create-card-fields>div{padding:0!important;border:none!important;}}",
     ".create-name-input{width:100%;font-family:var(--ff);font-size:25px;font-weight:800;background:transparent;border:none;border-bottom:2px solid var(--border);padding:10px 2px;color:var(--text);outline:none;margin-bottom:26px;}",
     ".create-name-input:focus{border-color:var(--accent);}",
     ".create-name-input::placeholder{color:var(--text3);}",
@@ -2463,11 +2467,11 @@ function Styles() {
     ".quiz-dir-btn span{font-size:13px;color:var(--text3);}",
     ".quiz-dir-btn:hover{border-color:var(--accent);background:var(--accent-dim);}",
     ".quiz-feedback{margin-top:8px;padding:12px 18px;border-radius:var(--r-sm);font-size:14px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);text-align:center;}",
-    ".study-nav{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.92);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100;}",
-    ".study-deck-title{font-size:14px;font-weight:700;color:var(--text);}",
+    ".study-nav{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.92);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100;gap:8px;}",
+    ".study-deck-title{font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;text-align:center;}",
     ".study-progress-bar{height:4px;background:var(--surface3);}",
     ".study-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--coral));transition:width .35s ease;}",
-    ".mode-switch-btn{font-family:var(--ff);font-size:13px;font-weight:600;padding:6px 13px;border-radius:var(--r-sm);background:var(--surface2);border:1.5px solid var(--border);color:var(--text2);cursor:pointer;}",
+    ".mode-switch-btn{font-family:var(--ff);font-size:13px;font-weight:600;padding:6px 13px;border-radius:var(--r-sm);background:var(--surface2);border:1.5px solid var(--border);color:var(--text2);cursor:pointer;white-space:nowrap;flex-shrink:0;}",
     ".flip-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:26px;}",
     ".detail-flip-area{display:flex;flex-direction:column;align-items:center;gap:20px;padding:8px 0 16px;}",
     ".detail-flip-card{width:min(520px,90vw);height:300px;perspective:1200px;cursor:pointer;border:none;background:none;padding:0;outline:none;}",
@@ -2553,9 +2557,14 @@ function Styles() {
     ".rt-btn:hover{background:var(--border);color:var(--text);}",
     ".rt-textarea{flex:1;min-height:70px;padding:10px 14px;outline:none;font-family:var(--ff);font-size:14px;line-height:1.6;color:var(--text);border:none;background:transparent;resize:vertical;width:100%;}",
     ".rt-textarea::placeholder{color:var(--text3);}",
+    // --- tablet ---
     "@media(max-width:1100px){.app-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
-    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:140px;}.term-row{grid-template-columns:1fr;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:1fr;gap:10px;}.navbar-left,.navbar-center,.navbar-right{justify-content:flex-start;}.section-head{align-items:flex-start;flex-direction:column;}}",
-    "@media(max-width:640px){.page-shell,.page{padding:0 16px 72px;}.dashboard-title,.set-header-title{max-width:none;}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:18px;}.launch-card strong{font-size:26px;}}",
+    // --- mobile-medium ---
+    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.choice-grid{grid-template-columns:1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
+    // --- mobile-small ---
+    "@media(max-width:640px){.page-shell,.page{padding:0 12px 72px;}.dashboard-title,.set-header-title{max-width:none;font-size:clamp(24px,6vw,36px);}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:14px 16px;}.launch-card strong{font-size:22px;}.launch-card{padding:18px 16px 16px;}.launch-card span{font-size:13px;}.dashboard-hero{padding:18px 16px;border-radius:20px;}.set-header-card{padding:18px 16px;border-radius:20px;margin-top:16px;gap:16px;}.section-heading{font-size:22px;}.dashboard-copy,.set-header-copy{font-size:14px;}.stat-chip{padding:10px 12px;}.stat-chip strong{font-size:20px;}.nbtn{padding:8px 14px;font-size:13px;}.credit-badge{padding:6px 10px;font-size:12px;}.set-meta-card strong{font-size:16px;}.set-meta-card span{font-size:11px;}.set-meta-card{padding:10px 12px;}.mode-grid{grid-template-columns:1fr;}.mode-big-btn{padding:16px 18px;}.quiz-card{padding:28px 20px;min-height:120px;}.flip-card{width:min(620px,calc(100vw - 32px));height:min(360px,60vh);}.detail-flip-card{width:min(520px,calc(100vw - 32px));height:min(300px,55vh);}.flip-view-body{padding:20px 12px;gap:20px;}.quiz-body{padding:12px;gap:10px;}.study-wrap{padding:20px 12px;gap:16px;}.result-summary-card{padding:24px 18px;}.filter-tabs{width:100%;}.ftab{flex:1;text-align:center;padding:7px 12px;}.test-submenu-card{padding:22px 18px;}.gen-input-row{padding:10px;}.gen-messages{padding:14px;}.gen-preview-panel{padding:14px;}.study-set-title{font-size:18px;}.study-set-meta{font-size:13px;}.study-set-card{border-radius:18px;}.terms-panel{padding:18px 14px;}.term-index{width:30px;height:30px;font-size:11px;border-radius:9px;}.term-value{font-size:14px;}.create-name-input{font-size:20px;}.settings-card{padding:14px 16px;}.card-card{padding:16px;}.hero-panel,.card-card,.terms-panel,.composer-panel{border-radius:18px;}.study-nav{padding:10px 14px;}.flip-nav-row{gap:20px;}.result-donut-row{gap:20px;flex-wrap:wrap;}}",
+    // --- extra-small (iPhone SE etc) ---
+    "@media(max-width:380px){.page-shell,.page{padding:0 8px 64px;}.dashboard-hero{padding:14px 12px;}.set-header-card{padding:14px 12px;}.launch-card strong{font-size:18px;}.launch-card span{font-size:12px;}.nbtn{padding:7px 10px;font-size:12px;}.flip-card{height:min(320px,55vh);}.detail-flip-card{height:min(260px,50vh);}.navbar{padding:8px 10px;}.credit-badge{padding:5px 8px;font-size:11px;}}",
 
   ].join("\n");
   return <style dangerouslySetInnerHTML={{__html: css}}/>;
