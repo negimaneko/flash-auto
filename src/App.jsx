@@ -1744,6 +1744,7 @@ function FlipView({deck,onBack}) {
 
 function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   const cards = deck?.cards || [];
+  const [answerDir, setAnswerDir] = useState(null); // "def" = show word, answer def; "word" = show def, answer word
   const [queue, setQueue] = useState(() => shuffle(cards));
   const [qi, setQi] = useState(0);
   const [choices, setChoices] = useState([]);
@@ -1753,10 +1754,10 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   const [answering, setAnswering] = useState(false);
   const [results, setResults] = useState([]);
   const [done, setDone] = useState(false);
-  const [startTime] = useState(() => Date.now());
+  const [startTime, setStartTime] = useState(() => Date.now());
   const [elapsedSec, setElapsedSec] = useState(0);
 
-  useEffect(() => {
+  const resetQuiz = () => {
     const shuffled = shuffle(cards);
     setQueue(shuffled);
     setQi(0);
@@ -1765,10 +1766,23 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
     setFeedback("");
     setResults([]);
     setDone(false);
-  }, [deck?.id, cards.length]);
+    setStartTime(Date.now());
+  };
 
   useEffect(() => {
-    if (mode !== "choice") return;
+    resetQuiz();
+    setAnswerDir(null);
+  }, [deck?.id, cards.length]);
+
+  // Helper: what to show as question and what is the answer
+  const getQA = (card) => {
+    if (!card) return { question: "-", answer: "-" };
+    if (answerDir === "word") return { question: card.definition, answer: card.word };
+    return { question: card.word, answer: card.definition };
+  };
+
+  useEffect(() => {
+    if (mode !== "choice" || !answerDir) return;
     const current = queue[qi];
     if (!current) {
       setChoices([]);
@@ -1776,7 +1790,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
     }
     const others = shuffle(cards.filter((c) => c.id !== current.id)).slice(0, 3);
     setChoices(shuffle([current, ...others]));
-  }, [mode, qi, queue, cards]);
+  }, [mode, qi, queue, cards, answerDir]);
 
   if (!cards.length) {
     return (
@@ -1790,6 +1804,33 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
           <div className="empty-state">
             <h3>カードがありません</h3>
             <p>クイズを始める前にカードを追加してください。</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Direction selection screen
+  if (!answerDir) {
+    return (
+      <div className="study-page">
+        <div className="study-nav">
+          <button className="nbtn ghost" onClick={onBack}>戻る</button>
+          <span className="study-deck-title">{mode === "choice" ? "4択クイズ" : "記述クイズ"}: {deck.name}</span>
+          <div style={{ width: 96 }} />
+        </div>
+        <div className="quiz-dir-wrap">
+          <h2 className="quiz-dir-title">解答形式を選んでください</h2>
+          <p className="quiz-dir-sub">{deck.cards.length}問 ・ {mode === "choice" ? "4択" : "記述"}</p>
+          <div className="quiz-dir-grid">
+            <button className="quiz-dir-btn" onClick={() => { resetQuiz(); setAnswerDir("def"); }}>
+              <strong>定義を解答</strong>
+              <span>単語を見て、定義を答えます</span>
+            </button>
+            <button className="quiz-dir-btn" onClick={() => { resetQuiz(); setAnswerDir("word"); }}>
+              <strong>単語を解答</strong>
+              <span>定義を見て、単語を答えます</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1847,7 +1888,8 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
     if (!current || selectedId || done) return;
     const ok = choice.id === current.id;
     setSelectedId(choice.id);
-    await commitResult(ok, ok ? "正解" : "答え: " + current.definition);
+    const { answer } = getQA(current);
+    await commitResult(ok, ok ? "正解" : "答え: " + answer);
   };
 
   const submitWrite = async () => {
@@ -1856,11 +1898,12 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
     if (!guess) return;
 
     setAnswering(true);
+    const { answer } = getQA(current);
     let ok = false;
     let message = "もう一度挑戦してください";
 
     const normalizedGuess = guess.toLowerCase();
-    const normalizedAnswer = String(current.definition || "").trim().toLowerCase();
+    const normalizedAnswer = String(answer || "").trim().toLowerCase();
     if (normalizedGuess && normalizedGuess === normalizedAnswer) {
       ok = true;
       message = "正解";
@@ -1868,10 +1911,10 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
       try {
         const judged = await aiEval(current.word, current.definition, guess, deck.defLang);
         ok = Boolean(judged?.correct);
-        message = judged?.feedback || (ok ? "正解" : "答え: " + current.definition);
+        message = judged?.feedback || (ok ? "正解" : "答え: " + answer);
       } catch {
         ok = false;
-        message = "答え: " + current.definition;
+        message = "答え: " + answer;
       }
     }
 
@@ -1972,16 +2015,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
 
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               <button className="nbtn" onClick={onBack}>単語帳に戻る</button>
-              <button className="nbtn primary" onClick={() => {
-                const shuffled = shuffle(cards);
-                setQueue(shuffled);
-                setQi(0);
-                setSelectedId(null);
-                setInput("");
-                setFeedback("");
-                setResults([]);
-                setDone(false);
-              }}>もう一度</button>
+              <button className="nbtn primary" onClick={() => { resetQuiz(); }}>もう一度</button>
             </div>
           </div>
         </div>
@@ -1997,9 +2031,9 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
         <div className="study-progress">{qi + 1} / {queue.length}</div>
       </div>
 
-      <div className="study-wrap">
+      <div className="quiz-body">
         <div className="quiz-card">
-          <div className="fc-text">{current?.word || "-"}</div>
+          <div className="fc-text">{getQA(current).question}</div>
         </div>
 
         {mode === "choice" ? (
@@ -2010,6 +2044,7 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
                 if (choice.id === current.id) cls += " c-correct";
                 else if (choice.id === selectedId) cls += " c-wrong";
               }
+              const { answer } = getQA(choice);
               return (
                 <button
                   key={choice.id}
@@ -2017,17 +2052,17 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
                   onClick={() => submitChoice(choice)}
                   disabled={Boolean(selectedId)}
                 >
-                  {choice.definition}
+                  {answer}
                 </button>
               );
             })}
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gap: 8, width: "100%" }}>
             <textarea
               className="write-textarea"
-              rows={5}
-              placeholder="定義を入力"
+              rows={3}
+              placeholder={answerDir === "word" ? "単語を入力" : "定義を入力"}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={answering}
@@ -2416,7 +2451,17 @@ function Styles() {
     ".study-page{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);}",
     ".study-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:32px 20px;gap:20px;max-width:660px;margin:0 auto;width:100%;}",
     ".study-progress{font-size:14px;font-weight:700;color:var(--text2);}",
-    ".quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;text-align:center;width:100%;box-shadow:var(--shadow);}",
+    ".quiz-body{flex:1;display:flex;flex-direction:column;align-items:center;padding:16px 16px;gap:12px;max-width:700px;margin:0 auto;width:100%;}",
+    ".quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:40px 32px;text-align:center;width:100%;min-height:160px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);}",
+    ".quiz-card .fc-text{font-size:clamp(22px,5vw,38px);}",
+    ".quiz-dir-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:16px;max-width:520px;margin:0 auto;width:100%;}",
+    ".quiz-dir-title{font-size:22px;font-weight:800;color:var(--text);margin:0;}",
+    ".quiz-dir-sub{font-size:14px;color:var(--text3);margin:0;}",
+    ".quiz-dir-grid{display:grid;gap:12px;width:100%;margin-top:8px;}",
+    ".quiz-dir-btn{padding:24px 20px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);cursor:pointer;text-align:center;transition:all .2s;font-family:var(--ff);}",
+    ".quiz-dir-btn strong{display:block;font-size:17px;color:var(--text);margin-bottom:4px;}",
+    ".quiz-dir-btn span{font-size:13px;color:var(--text3);}",
+    ".quiz-dir-btn:hover{border-color:var(--accent);background:var(--accent-dim);}",
     ".quiz-feedback{margin-top:8px;padding:12px 18px;border-radius:var(--r-sm);font-size:14px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);text-align:center;}",
     ".study-nav{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.92);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100;}",
     ".study-deck-title{font-size:14px;font-weight:700;color:var(--text);}",
@@ -2454,8 +2499,8 @@ function Styles() {
     ".fc-nav:hover{background:var(--accent);border-color:var(--accent);color:#fff;}",
     ".fc-nav.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".quiz-stage{flex:1;display:flex;flex-direction:column;align-items:center;padding:28px 20px;gap:18px;max-width:660px;margin:0 auto;width:100%;}",
-    ".choice-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:9px;}",
-    ".choice-btn{padding:16px 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--ff);font-size:14px;color:var(--text);cursor:pointer;text-align:center;line-height:1.5;transition:all .18s;}",
+    ".choice-grid{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;}",
+    ".choice-btn{padding:20px 16px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:var(--ff);font-size:15px;color:var(--text);cursor:pointer;text-align:center;line-height:1.5;transition:all .18s;min-height:80px;display:flex;align-items:center;justify-content:center;}",
     ".choice-btn:hover{border-color:var(--accent);background:var(--accent-dim);}",
     ".c-correct{border-color:var(--green)!important;background:var(--green-dim)!important;color:var(--green)!important;font-weight:700;}",
     ".c-wrong{border-color:var(--red)!important;background:var(--red-dim)!important;color:var(--red)!important;}",
