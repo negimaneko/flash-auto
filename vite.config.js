@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { createClient } from '@supabase/supabase-js'
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
 const DEFAULT_OLLAMA_MODEL = 'qwen3:1.7b'
@@ -178,6 +179,68 @@ async function requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, m
   }
 
   throw new Error('AI生成に失敗しました。Ollamaが起動していないか、GROQ_API_KEYが設定されていません。')
+}
+
+/// --- /api/track: ローカル開発時も Supabase に保存する ---
+
+const ALLOWED_TRACK_EVENTS = new Set([
+  'app_open', 'signup_guest', 'generate_word', 'generate_theme_deck',
+  'save_deck', 'review_card', 'return_visit', 'login_upgrade',
+])
+
+async function handleTrackProxy(req, res, supabaseUrl, supabaseKey) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (req.method === 'OPTIONS') { res.statusCode = 200; res.end(); return }
+  if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return }
+
+  // Supabase 未設定時はスキップ（200 を返すだけ）
+  if (!supabaseUrl || !supabaseKey) {
+    sendJson(res, 200, { ok: true })
+    return
+  }
+
+  let body
+  try { body = await readJsonBody(req) } catch { sendJson(res, 400, { error: 'Invalid JSON body' }); return }
+
+  const { anonymousUserId, eventName, metadata } = body || {}
+
+  if (!anonymousUserId || typeof anonymousUserId !== 'string' || anonymousUserId.length > 128) {
+    sendJson(res, 400, { error: 'anonymousUserId is required' }); return
+  }
+  if (!eventName || !ALLOWED_TRACK_EVENTS.has(eventName)) {
+    sendJson(res, 400, { error: 'Invalid eventName' }); return
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data: user, error: upsertError } = await supabase
+      .from('users')
+      .upsert(
+        { anonymous_user_id: anonymousUserId, last_seen_at: new Date().toISOString() },
+        { onConflict: 'anonymous_user_id' }
+      )
+      .select('id')
+      .single()
+
+    if (upsertError) throw upsertError
+
+    const { error: insertError } = await supabase.from('events').insert({
+      user_id: user.id,
+      event_name: eventName,
+      metadata: metadata || null,
+    })
+
+    if (insertError) throw insertError
+  } catch (e) {
+    console.error('[/api/track] error:', e?.message ?? e)
+  }
+
+  sendJson(res, 200, { ok: true })
 }
 
 async function handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel) {
@@ -396,6 +459,8 @@ export default defineConfig(({ mode }) => {
   const apiKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY
   const ollamaBaseUrl = (env.OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).replace(/\/+$/, '')
   const ollamaModel = env.OLLAMA_MODEL || process.env.OLLAMA_MODEL || ''
+  const supabaseUrl = env.SUPABASE_URL || process.env.SUPABASE_URL || ''
+  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
   return {
     plugins: [
@@ -404,6 +469,11 @@ export default defineConfig(({ mode }) => {
         name: 'local-ai-api',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
+            if (req.url?.startsWith('/api/track')) {
+              await handleTrackProxy(req, res, supabaseUrl, supabaseKey)
+              return
+            }
+
             if (req.url?.startsWith('/api/deck-cache')) {
               await handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel)
               return

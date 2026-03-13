@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { getAnonymousUserId, trackEvent, isNewUser } from "./lib/tracking.js";
 
 function normalizeLanguageValue(value, fallback = "ja") {
   const text = String(value ?? "").trim();
@@ -63,31 +64,7 @@ const getLangLabel = (code) => {
 };
 const toLanguageInputValue = (value, fallback = "ja") =>
   getLangLabel(normalizeLanguageValue(value, fallback));
-const ANONYMOUS_USER_ID_KEY = "flash auto-anonymous-user-id";
 const AI_GENERATE_DAILY_LIMIT = 3;
-
-function buildAnonymousUserId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `anon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function getAnonymousUserId() {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const existing = window.localStorage.getItem(ANONYMOUS_USER_ID_KEY);
-    if (existing) return existing;
-
-    const nextId = buildAnonymousUserId();
-    window.localStorage.setItem(ANONYMOUS_USER_ID_KEY, nextId);
-    return nextId;
-  } catch {
-    return null;
-  }
-}
 
 const DETAIL_LEVELS = [
   { id: 1, label: "短め", desc: "短い1文" },
@@ -121,7 +98,7 @@ function getDeckTheme(deck) {
   if (/history|philosophy|art|music/i.test(h)) {
     return { bg: "linear-gradient(135deg,#1a1000,#2d1e00)", icon: "ART", accent: "#fbbf24" };
   }
-  return { bg: "linear-gradient(135deg,#1e1b4b,#312e81)", icon: "DECK", accent: "#818cf8" };
+  return { bg: "linear-gradient(135deg,#0f2d2a,#134e4a)", icon: "DECK", accent: "#5eead4" };
 }
 
 const SEED_DECKS = [
@@ -231,13 +208,19 @@ const uid = () => Math.random().toString(36).slice(2,9);
 const shuffle = arr => [...arr].sort(()=>Math.random()-.5);
 
 // AI API helper (prefer local Ollama, then fall back to hosted endpoints)
+// 戻り値: { text: string, provider: string, fallbackUsed: boolean }
 async function callAI(prompt, maxTokens = 1024) {
-  const endpoints = ["/api/ollama", "/api/groq", "/api/gemini"];
+  const endpoints = [
+    { url: "/api/ollama", provider: "ollama" },
+    { url: "/api/groq",   provider: "groq"   },
+    { url: "/api/gemini", provider: "gemini" },
+  ];
   let lastError = null;
+  let attemptCount = 0;
 
-  for (const endpoint of endpoints) {
+  for (const ep of endpoints) {
     try {
-      const r = await fetch(endpoint, {
+      const r = await fetch(ep.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, maxTokens }),
@@ -245,8 +228,9 @@ async function callAI(prompt, maxTokens = 1024) {
       const isJson = (r.headers.get("content-type") || "").includes("application/json");
       const d = isJson ? await r.json() : { error: await r.text() };
 
-      if (r.status === 404 && endpoint !== endpoints[endpoints.length - 1]) {
-        lastError = new Error(`${endpoint} is not deployed`);
+      if (r.status === 404 && ep !== endpoints[endpoints.length - 1]) {
+        lastError = new Error(`${ep.url} is not deployed`);
+        attemptCount++;
         continue;
       }
       if (!r.ok) {
@@ -255,10 +239,11 @@ async function callAI(prompt, maxTokens = 1024) {
       if (!d.text) {
         throw new Error("AI returned an empty response");
       }
-      return d.text;
+      return { text: d.text, provider: ep.provider, fallbackUsed: attemptCount > 0 };
     } catch (e) {
       lastError = e instanceof Error ? e : new Error("AI request failed");
-      if (endpoint === endpoints[endpoints.length - 1]) {
+      attemptCount++;
+      if (ep === endpoints[endpoints.length - 1]) {
         throw lastError;
       }
     }
@@ -310,15 +295,34 @@ async function aiSuggest({term,wordLang,defLang,detailLevel,deckName,otherWords}
   const maxTk = isTechnical
     ? (lvl.id===1 ? 80 : lvl.id===2 ? 200 : 500)
     : 30;
-  return (await callAI(prompt, maxTk)).trim();
+  const t0 = Date.now();
+  try {
+    const { text, provider, fallbackUsed } = await callAI(prompt, maxTk);
+    trackEvent("generate_word", {
+      input_word: term,
+      generation_latency_ms: Date.now() - t0,
+      generation_success: true,
+      ai_provider: provider,
+      fallback_used: fallbackUsed,
+    });
+    return text.trim();
+  } catch (e) {
+    trackEvent("generate_word", {
+      input_word: term,
+      generation_latency_ms: Date.now() - t0,
+      generation_success: false,
+      generation_error: e instanceof Error ? e.message : "Unknown error",
+    });
+    throw e;
+  }
 }
 
 // AI: quiz evaluation
 async function aiEval(term,correctDef,userAns,defLang) {
   try {
     const prompt = `Evaluate whether the learner answer matches the correct definition. Term: ${term}\nCorrect: ${correctDef}\nLearner: ${userAns}\nReturn JSON only: {"correct":true/false,"feedback":"short feedback in ${getLangLabel(normalizeLanguageValue(defLang))}"}`;
-    const raw = await callAI(prompt, 200);
-    const cleaned = raw.split("```json").join("").split("```").join("").trim();
+    const { text } = await callAI(prompt, 200);
+    const cleaned = text.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"correct":false,"feedback":""}');
   } catch(e){ return {correct:false,feedback:"Could not evaluate the answer."}; }
 }
@@ -327,8 +331,8 @@ async function aiEval(term,correctDef,userAns,defLang) {
 async function aiMastery(results) {
   try {
     const prompt = `Judge whether this study result means the learner mastered the deck. Result: ${JSON.stringify(results)}\nReturn JSON only: {"cleared":true/false,"message":"short message in Japanese"}`;
-    const raw = await callAI(prompt, 200);
-    const cleaned = raw.split("```json").join("").split("```").join("").trim();
+    const { text } = await callAI(prompt, 200);
+    const cleaned = text.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"cleared":false,"message":""}');
   } catch(e){ return {cleared:false,message:"Mastery check could not be completed."}; }
 }
@@ -424,9 +428,18 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
   const [appCredits, setAppCredits] = useState(AI_GENERATE_DAILY_LIMIT);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    getAnonymousUserId();
+    const newUser = isNewUser();        // ID生成前に判定する
+    const userId = getAnonymousUserId(); // 存在しなければここで生成
+    if (!userId) return;
+    if (newUser) {
+      trackEvent("signup_guest");
+    } else {
+      trackEvent("return_visit");
+    }
+    trackEvent("app_open", { is_return: !newUser });
   }, []);
 
   useEffect(() => {
@@ -457,6 +470,10 @@ export default function App() {
     setActiveDeck(normalizedDeck);
     setView("detail");
     showToast("単語帳を作成しました");
+    trackEvent("save_deck", {
+      deck_id: normalizedDeck.id,
+      card_count: normalizedDeck.cards.length,
+    });
   };
   const toggleFavorite = (id) => {
     setDecks(prev=>prev.map(d=>d.id===id
@@ -506,14 +523,24 @@ export default function App() {
     <div className="app">
       <Styles/>
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
+      <MobileDrawer open={menuOpen} onClose={()=>setMenuOpen(false)}
+        credits={appCredits}
+        onHome={()=>{goHome();setMenuOpen(false);}}
+        onLibrary={()=>{setView("library");setMenuOpen(false);}}
+        onGenerate={()=>{setView("generate");setMenuOpen(false);}}
+        onNew={()=>{setEditDeck(null);setView("create");setMenuOpen(false);}}
+        activeView={view}
+      />
       {view==="home"      && <HomeView decks={decks} credits={appCredits} onOpenDetail={openDetail}
                                onNew={()=>{setEditDeck(null);setView("create");}}
                                onGenerate={()=>setView("generate")}
                                onLibrary={()=>setView("library")}
                                onToggleFav={toggleFavorite}
                                onEdit={d=>{setEditDeck(d);setView("create");}}
-                               onDelete={id=>{setDecks(p=>p.filter(d=>d.id!==id));showToast("削除しました");}}/>}
-      {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite}/>}
+                               onDelete={id=>{setDecks(p=>p.filter(d=>d.id!==id));showToast("削除しました");}}
+                               onMenuClick={()=>setMenuOpen(true)}
+                               onSaveGeneratedDeck={saveGeneratedDeck}/>}
+      {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)} credits={appCredits}/>}
       {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
       {view==="detail"    && activeDeck && <DetailView deck={syncActive(activeDeck.id)} onBack={goHome}
@@ -522,19 +549,61 @@ export default function App() {
                                onEdit={()=>{setEditDeck(syncActive(activeDeck.id));setView("create");}}
                                onDelete={()=>{setDecks(p=>p.filter(d=>d.id!==activeDeck.id));showToast("削除しました");goHome();}}
                                onUpdateCard={updateCard} onAddCard={addCard} onDeleteCard={deleteCard} showToast={showToast}/>}
-      {view==="flip"      && activeDeck && <FlipView  deck={syncActive(activeDeck.id)} onBack={()=>setView("detail")}/>}
+      {view==="flip"      && activeDeck && <FlipView  deck={syncActive(activeDeck.id)} onBack={()=>{
+        trackEvent("review_card", { deck_id: activeDeck.id, card_count: syncActive(activeDeck.id).cards.length, mode: "flip" });
+        setView("detail");
+      }}/>}
       {view==="quiz"      && activeDeck && <QuizView  deck={syncActive(activeDeck.id)} mode={quizMode} onBack={()=>setView("detail")} onCleared={markCleared} onUpdateStreaks={updateStreaks} showToast={showToast}/>}
     </div>
   );
 }
 
-// HOME
-function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
+// MOBILE DRAWER
+function MobileDrawer({open,onClose,credits,onHome,onLibrary,onGenerate,onNew,activeView}) {
   const items = [
-    { id: "home", label: "ホーム", action: onHome },
-    { id: "library", label: "公開ライブラリ", action: onLibrary },
-    { id: "generate", label: "AI作成", action: onGenerate },
-    { id: "create", label: "新規作成", action: onNew },
+    { id:"home", label:"ホーム", icon:"🏠", action:onHome },
+    { id:"my-library", label:"ライブラリ", icon:"📚", desc:"作成・保存した学習セット", action:onHome },
+    { id:"library", label:"公開ライブラリ", icon:"🌐", action:onLibrary },
+  ];
+  return (
+    <>
+      <div className={`drawer-overlay ${open?"drawer-overlay-on":""}`} onClick={onClose}/>
+      <nav className={`drawer ${open?"drawer-on":""}`}>
+        <div className="drawer-header">
+          <div className="sidebar-brand-mark">F</div>
+          <div>
+            <div className="sidebar-brand-title">Flash Auto</div>
+            <div className="sidebar-brand-sub">学習セット</div>
+          </div>
+          <button className="drawer-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="drawer-body">
+          {items.map(item=>(
+            <button key={item.id} className={`drawer-item ${activeView===item.id?"drawer-item-on":""}`} onClick={item.action}>
+              <span className="drawer-item-icon">{item.icon}</span>
+              <div>
+                <div className="drawer-item-label">{item.label}</div>
+                {item.desc && <div className="drawer-item-desc">{item.desc}</div>}
+              </div>
+            </button>
+          ))}
+          <div className="drawer-divider"/>
+          <div className="drawer-credit">
+            <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
+            <span>クレジット残機: <strong>{credits}</strong></span>
+          </div>
+        </div>
+      </nav>
+    </>
+  );
+}
+
+// HOME
+function AppSidebar({active,onHome,onLibrary,credits}) {
+  const items = [
+    { id: "home", label: "ホーム", icon: "🏠", action: onHome },
+    { id: "my-library", label: "ライブラリ", icon: "📚", desc: "作成・保存した学習セット", action: onHome },
+    { id: "library", label: "公開ライブラリ", icon: "🌐", action: onLibrary },
   ].filter((item)=>typeof item.action === "function");
 
   return (
@@ -555,32 +624,103 @@ function AppSidebar({active,onHome,onLibrary,onGenerate,onNew}) {
             onClick={item.action}
             type="button"
           >
-            {item.label}
+            <span className="sidebar-link-icon">{item.icon}</span>
+            <div>
+              <div>{item.label}</div>
+              {item.desc && <div className="sidebar-link-desc">{item.desc}</div>}
+            </div>
           </button>
         ))}
       </div>
 
-      <div className="sidebar-note">
-        <span className="sidebar-note-kicker">使い方</span>
-        <p>セットを作成して、フラッシュカードかクイズで繰り返し覚えます。</p>
+      <div className="sidebar-credit-card">
+        <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
+        <span>クレジット残機: <strong>{credits !== undefined ? credits : "—"}</strong></span>
       </div>
     </aside>
   );
 }
 
-function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete}) {
+function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck}) {
   const [filter,setFilter] = useState("all");
+  const [quickTopic, setQuickTopic] = useState("");
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickResult, setQuickResult] = useState(null);
+  const [quickError, setQuickError] = useState("");
+  const appOpenRef = useRef(Date.now());
+  const QUICK_SAMPLES = ["量子力学", "TOEFL", "経済学", "機械学習", "心理学"];
+
+  const handleQuickGenerate = async () => {
+    if (!quickTopic.trim() || quickLoading) return;
+    setQuickLoading(true);
+    setQuickError("");
+    setQuickResult(null);
+    const t0 = Date.now();
+    try {
+      const userId = getAnonymousUserId();
+      if (!userId) throw new Error("ユーザーIDを作成できませんでした。");
+      const result = await fetchDeckFromCacheOrGenerate({
+        action: "initial",
+        topic: quickTopic.trim(),
+        wordLang: "technical",
+        defLang: "ja",
+        detailLevel: 2,
+        userId,
+      });
+      const cards = (result.deck?.cards || []).map(card => ({ id: uid(), word: card.word, definition: card.definition }));
+      setQuickResult({
+        id: "gen-" + uid(),
+        name: result.deck?.deckName || quickTopic.trim(),
+        author: "AIアシスタント",
+        isPublic: false,
+        wordLang: result.deck?.wordLang || "technical",
+        defLang: result.deck?.defLang || "ja",
+        detailLevel: result.deck?.detailLevel || 2,
+        tags: result.deck?.tags || [],
+        aiGenerated: true,
+        cleared: false,
+        masteredIds: [],
+        favorited: false,
+        favCount: 0,
+        cards,
+      });
+      trackEvent("generate_theme_deck", {
+        theme: quickTopic.trim(),
+        deck_id: result.cacheId || null,
+        generation_latency_ms: Date.now() - t0,
+        time_to_first_generation: Date.now() - appOpenRef.current,
+        generation_success: true,
+        from_cache: result.source === "cache",
+        action: "initial",
+        source: "home_quick_generate",
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "生成に失敗しました。";
+      setQuickError(message);
+      trackEvent("generate_theme_deck", {
+        theme: quickTopic.trim(),
+        generation_latency_ms: Date.now() - t0,
+        generation_success: false,
+        generation_error: message,
+        action: "initial",
+        source: "home_quick_generate",
+      });
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
   const shown = filter==="fav" ? decks.filter(d=>d.favorited) : decks;
   const totalCards = decks.reduce((sum, deck)=>sum + deck.cards.length, 0);
   const favoriteCount = decks.filter((deck)=>deck.favorited).length;
   const publicCount = decks.filter((deck)=>deck.isPublic).length;
   return (
     <div className="page">
-      <Navbar right={
+      <Navbar onMenuClick={onMenuClick} right={
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           <div className="credit-badge"><svg className="credit-gem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg><span>{credits}</span></div>
-          <button className="nbtn ai-btn" onClick={onGenerate}><span className="btn-plus">+</span> ✨ AI作成</button>
-          <button className="nbtn primary" onClick={onNew}><span className="btn-plus">+</span> 手動作成</button>
+          <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
+          <button className="nbtn primary" onClick={onNew}>手動作成</button>
         </div>
       }/>
       <div className="app-shell">
@@ -588,28 +728,63 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
           active="home"
           onHome={()=>setFilter("all")}
           onLibrary={onLibrary}
-          onGenerate={onGenerate}
-          onNew={onNew}
+          credits={credits}
         />
 
         <main className="shell-main">
           <section className="dashboard-hero">
-            <div className="section-kicker">学習ホーム</div>
-            <h1 className="dashboard-title">自分の学習セットをまとめて管理</h1>
-            <p className="dashboard-copy">セット一覧からすぐ学習モードへ入り、必要ならAIでカードを増やせます。</p>
-            <div className="launch-grid">
-              <button className="launch-card launch-card-ai launch-card-featured" onClick={onGenerate}>
-                <span className="launch-kicker">AIに任せる</span>
-                <strong><span className="btn-plus">+</span> ✨ AI作成</strong>
-                <span>テーマだけ決めて、カードのたたき台を一気に生成します。</span>
-              </button>
-              <button className="launch-card launch-card-manual" onClick={onNew}>
-                <span className="launch-kicker">手動で始める</span>
-                <strong><span className="btn-plus">+</span> 手動作成</strong>
-                <span>自分で単語と定義を入力して、オリジナルのセットをすぐ作成します。</span>
-              </button>
+            <div className="section-kicker">AI単語帳</div>
+            <h1 className="dashboard-title">何を学びたいですか？</h1>
+            <p className="dashboard-copy">テーマを入力するだけで、AIが単語帳を自動生成します。</p>
+
+            <div className="quick-gen-box">
+              <div className="quick-gen-input-row">
+                <input
+                  className="quick-gen-input"
+                  value={quickTopic}
+                  onChange={e => setQuickTopic(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleQuickGenerate()}
+                  placeholder="例：量子力学、TOEFL、経済学..."
+                  disabled={quickLoading}
+                />
+                <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim()}>
+                  {quickLoading ? "生成中..." : "✨ 生成"}
+                </button>
+              </div>
+              <div className="quick-gen-samples">
+                {QUICK_SAMPLES.map(s => (
+                  <button key={s} className="sample-chip" onClick={() => setQuickTopic(s)} disabled={quickLoading}>{s}</button>
+                ))}
+              </div>
+              {quickError && <div className="quick-gen-error">{quickError}</div>}
             </div>
+
+            {quickResult && (
+              <div className="quick-result-panel">
+                <div className="quick-result-header">
+                  <div>
+                    <strong className="quick-result-name">{quickResult.name}</strong>
+                    <span className="quick-result-meta"> · {quickResult.cards.length}語</span>
+                  </div>
+                  <button className="nbtn primary" onClick={() => onSaveGeneratedDeck(quickResult)}>この単語帳を保存</button>
+                </div>
+                <div className="quick-cards-grid">
+                  {quickResult.cards.map(card => (
+                    <div key={card.id} className="quick-card-item">
+                      <div className="quick-card-word">{card.word}</div>
+                      <div className="quick-card-def">{card.definition}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="quick-result-footer">
+                  <button className="nbtn ghost" onClick={onGenerate}>詳細設定で再生成</button>
+                  <button className="nbtn ghost" onClick={() => { setQuickResult(null); setQuickTopic(""); }}>クリア</button>
+                </div>
+              </div>
+            )}
+
             <div className="dashboard-actions">
+              <button className="nbtn ghost" onClick={onNew}>手動で作成する</button>
               <button className="nbtn ghost" onClick={onLibrary}>公開ライブラリを見る</button>
             </div>
             <div className="stats-row">
@@ -638,8 +813,8 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
                 <p>{filter==="fav" ? "お気に入りのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}><span className="btn-plus">+</span> ✨ AI作成</button>
-                    <button className="nbtn primary" onClick={onNew}><span className="btn-plus">+</span> 手動作成</button>
+                    <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
+                    <button className="nbtn primary" onClick={onNew}>手動作成</button>
                   </div>
                 )}
               </div>
@@ -810,6 +985,7 @@ function GenerateView({onSave,onBack,showToast}) {
 
     setLoading(true);
     setError("");
+    const t0 = Date.now();
 
     try {
       const normalizedDefLang = normalizeLanguageValue(defLang);
@@ -828,6 +1004,14 @@ function GenerateView({onSave,onBack,showToast}) {
         userId,
       });
       applyGeneratedDeckResult(result.deck, result.cacheId, result.remainingCredits, normalizedDefLang);
+      trackEvent("generate_theme_deck", {
+        theme: topic.trim(),
+        deck_id: result.cacheId || null,
+        generation_latency_ms: Date.now() - t0,
+        generation_success: true,
+        from_cache: result.source === "cache",
+        action: "initial",
+      });
 
       if (result.source === "cache") {
         showToast("既存の単語帳をキャッシュから表示しました");
@@ -836,6 +1020,13 @@ function GenerateView({onSave,onBack,showToast}) {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
+      trackEvent("generate_theme_deck", {
+        theme: topic.trim(),
+        generation_latency_ms: Date.now() - t0,
+        generation_success: false,
+        generation_error: message,
+        action: "initial",
+      });
       setError(message);
       showToast(message, "err");
     } finally {
@@ -851,6 +1042,7 @@ function GenerateView({onSave,onBack,showToast}) {
 
     setContinuing(true);
     setError("");
+    const t0 = Date.now();
 
     try {
       const userId = getAnonymousUserId();
@@ -880,9 +1072,24 @@ function GenerateView({onSave,onBack,showToast}) {
           : [...generated.cards.map(c => ({ word: c.word, definition: c.definition })), ...(result.deck?.cards || [])],
       };
       applyGeneratedDeckResult(mergedDeck, result.cacheId || generatedCacheId, result.remainingCredits, generated.defLang);
+      trackEvent("generate_theme_deck", {
+        theme: topic.trim() || generated.name,
+        deck_id: result.cacheId || generatedCacheId || null,
+        generation_latency_ms: Date.now() - t0,
+        generation_success: true,
+        added_count: result.addedCount || 0,
+        action: "continue",
+      });
       showToast(`${result.addedCount || 0}枚のカードを追加しました`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
+      trackEvent("generate_theme_deck", {
+        theme: topic.trim() || generated?.name,
+        generation_latency_ms: Date.now() - t0,
+        generation_success: false,
+        generation_error: message,
+        action: "continue",
+      });
       setError(message);
       showToast(message, "err");
     } finally {
@@ -1036,7 +1243,7 @@ function GenerateView({onSave,onBack,showToast}) {
     </div>
   );
 }
-function LibraryView({decks,onBack,onOpenDetail,onToggleFav}) {
+function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick,credits}) {
   const [query,setQuery]=useState("");
   const [activeTag,setActiveTag]=useState(null);
   const allTags=[...new Set(decks.flatMap((deck)=>deck.tags||[]))].sort();
@@ -1052,13 +1259,14 @@ function LibraryView({decks,onBack,onOpenDetail,onToggleFav}) {
 
   return (
     <div className="page">
-      <Navbar right={<button className="nbtn ghost" onClick={onBack}>ホームへ戻る</button>} />
+      <Navbar onMenuClick={onMenuClick} right={<button className="nbtn ghost" onClick={onBack}>ホームへ戻る</button>} />
 
       <div className="app-shell">
         <AppSidebar
           active="library"
           onHome={onBack}
           onLibrary={()=>{}}
+          credits={credits}
         />
 
         <main className="shell-main">
@@ -1842,8 +2050,16 @@ function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
   const percent = cards.length ? Math.round((correctCount / cards.length) * 100) : 0;
 
   const finishQuiz = async (finalResults) => {
-    setElapsedSec(Math.round((Date.now() - startTime) / 1000));
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    setElapsedSec(elapsed);
     onUpdateStreaks(deck.id, finalResults);
+    trackEvent("review_card", {
+      deck_id: deck.id,
+      card_count: finalResults.length,
+      correct_count: finalResults.filter((r) => r.correct).length,
+      mode: mode === "choice" ? "quiz_choice" : "quiz_write",
+      elapsed_sec: elapsed,
+    });
     if (finalResults.every((r) => r.correct)) {
       onCleared(deck.id);
       showToast?.("単語帳達成です！", "success");
@@ -2111,7 +2327,7 @@ function CircularProgress({ percent }) {
         <defs>
           <linearGradient id="achGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="var(--accent)" />
-            <stop offset="100%" stopColor="#9333ea" />
+            <stop offset="100%" stopColor="#2dd4bf" />
           </linearGradient>
         </defs>
       </svg>
@@ -2161,10 +2377,13 @@ function ResultDonut({ percent, colorVar = "--accent", bgColorVar = "--coral" })
 }
 
 // SHARED
-function Navbar({left,center,right}) {
+function Navbar({left,center,right,onMenuClick}) {
   return (
     <header className="navbar">
-      <div className="navbar-left">{left||<div className="logo">Flash Auto</div>}</div>
+      <div className="navbar-left">
+        {onMenuClick && <button className="hamburger-btn" onClick={onMenuClick} aria-label="メニュー"><span/><span/><span/></button>}
+        {left||<div className="logo">Flash Auto</div>}
+      </div>
       <div className="navbar-center">{center}</div>
       <div className="navbar-right">{right}</div>
     </header>
@@ -2179,7 +2398,7 @@ function Styles() {
   const css = [
     "@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap');",
     "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}",
-    ":root{--bg:#f0f2f8;--surface:#fff;--surface2:#f4f6fb;--surface3:#e8ebf4;--border:#e0e4f0;--border2:#c8ceea;--accent:#6c63ff;--accent2:#5a52e0;--accent-dim:rgba(108,99,255,.1);--coral:#ff6b6b;--coral-dim:rgba(255,107,107,.1);--red:#ef4444;--red-dim:rgba(239,68,68,.1);--green:#22c55e;--green-dim:rgba(34,197,94,.1);--text:#1e1b4b;--text2:#6b7280;--text3:#9ca3af;--ff:'Outfit','Noto Sans JP',sans-serif;--r:16px;--r-sm:10px;--shadow:0 4px 20px rgba(108,99,255,.12);--shadow-lg:0 8px 40px rgba(108,99,255,.18);}",
+    ":root{--bg:#f0f5f4;--surface:#fff;--surface2:#f2f7f6;--surface3:#e2edeb;--border:#d4e4e1;--border2:#b8d4cf;--accent:#0d9488;--accent2:#0f766e;--accent-dim:rgba(13,148,136,.1);--coral:#ff6b6b;--coral-dim:rgba(255,107,107,.1);--red:#ef4444;--red-dim:rgba(239,68,68,.1);--green:#22c55e;--green-dim:rgba(34,197,94,.1);--text:#1a2e2b;--text2:#5f7a76;--text3:#8fa8a3;--ff:'Outfit','Noto Sans JP',sans-serif;--r:16px;--r-sm:10px;--shadow:0 4px 20px rgba(13,148,136,.10);--shadow-lg:0 8px 40px rgba(13,148,136,.16);}",
     "html,body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh;overflow-x:hidden;-webkit-text-size-adjust:100%;}",
     ".app{min-height:100vh;background:var(--bg);overflow-x:hidden;}",
     ".splash-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#0f1e3a;}",
@@ -2190,14 +2409,34 @@ function Styles() {
     ".navbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:14px 24px;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;}",
     ".navbar-left{display:flex;align-items:center;}",
     ".navbar-center{display:flex;align-items:center;justify-content:center;}",
-    ".navbar-right{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}",
+    ".navbar-right{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;}",
     ".logo{font-family:'Outfit',sans-serif;font-weight:800;font-size:22px;letter-spacing:.04em;background:linear-gradient(135deg,var(--accent),var(--coral));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}",
     ".nav-center-title{font-weight:700;font-size:16px;color:var(--text);}",
+    // hamburger & drawer
+    ".hamburger-btn{display:none;background:none;border:none;cursor:pointer;padding:6px;margin-right:8px;flex-direction:column;gap:5px;justify-content:center;align-items:center;width:36px;height:36px;border-radius:8px;transition:background .15s;}",
+    ".hamburger-btn:hover{background:var(--surface2);}",
+    ".hamburger-btn span{display:block;width:20px;height:2px;background:var(--text);border-radius:2px;transition:all .2s;}",
+    ".drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:998;opacity:0;pointer-events:none;transition:opacity .25s;}",
+    ".drawer-overlay-on{opacity:1;pointer-events:auto;}",
+    ".drawer{position:fixed;top:0;left:0;bottom:0;width:min(300px,80vw);background:var(--surface);z-index:999;transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;box-shadow:4px 0 24px rgba(0,0,0,.12);}",
+    ".drawer-on{transform:translateX(0);}",
+    ".drawer-header{display:flex;align-items:center;gap:12px;padding:20px 18px;border-bottom:1px solid var(--border);}",
+    ".drawer-close{margin-left:auto;background:none;border:none;font-size:18px;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:8px;}",
+    ".drawer-close:hover{background:var(--surface2);}",
+    ".drawer-body{flex:1;overflow-y:auto;padding:12px;}",
+    ".drawer-item{font-family:var(--ff);display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border:none;border-radius:14px;background:transparent;color:var(--text);text-align:left;cursor:pointer;transition:background .15s;font-size:15px;font-weight:600;}",
+    ".drawer-item:hover,.drawer-item-on{background:linear-gradient(135deg,rgba(13,148,136,.1),rgba(45,212,191,.1));}",
+    ".drawer-item-icon{font-size:20px;flex-shrink:0;}",
+    ".drawer-item-label{font-weight:700;}",
+    ".drawer-item-desc{font-size:12px;color:var(--text2);font-weight:400;margin-top:2px;}",
+    ".drawer-divider{height:1px;background:var(--border);margin:8px 16px;}",
+    ".drawer-credit{display:flex;align-items:center;gap:10px;padding:14px 16px;font-size:14px;color:var(--text2);font-weight:600;}",
+    ".drawer-credit strong{color:var(--accent);font-weight:800;}",
     // buttons
-    ".credit-badge{display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:999px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1.5px solid rgba(99,102,241,.2);font-weight:700;font-size:14px;color:#6366f1;font-family:var(--ff);}",
-    ".credit-gem{color:#6366f1;flex-shrink:0;}",
+    ".credit-badge{display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:999px;background:linear-gradient(135deg,#ecfdf5,#ccfbf1);border:1.5px solid rgba(13,148,136,.2);font-weight:700;font-size:14px;color:var(--accent);font-family:var(--ff);}",
+    ".credit-gem{color:var(--accent);flex-shrink:0;}",
     ".btn-plus{font-size:1.4em;font-weight:900;line-height:1;vertical-align:middle;}",
-    ".nbtn{font-family:var(--ff);font-weight:600;font-size:14px;padding:9px 18px;border-radius:var(--r-sm);cursor:pointer;transition:all .2s;border:1.5px solid transparent;}",
+    ".nbtn{font-family:var(--ff);font-weight:600;font-size:14px;padding:9px 18px;border-radius:var(--r-sm);cursor:pointer;transition:all .2s;border:1.5px solid transparent;white-space:nowrap;}",
     ".nbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".nbtn.primary:hover{background:var(--accent2);}",
     ".nbtn.primary:disabled{opacity:.45;cursor:default;}",
@@ -2205,7 +2444,7 @@ function Styles() {
     ".nbtn.ghost:hover{background:var(--surface2);color:var(--text);}",
     ".nbtn.danger{background:transparent;color:var(--red);border-color:rgba(239,68,68,.35);}",
     ".nbtn.danger:hover{background:var(--red-dim);}",
-    ".nbtn.ai-btn{background:linear-gradient(135deg,var(--accent),#9333ea);color:#fff;border-color:transparent;}",
+    ".nbtn.ai-btn{background:linear-gradient(135deg,var(--accent),#2dd4bf);color:#fff;border-color:transparent;}",
     ".nbtn.ai-btn:hover{opacity:.9;transform:translateY(-1px);}",
     // shared panels
     ".page-shell,.page{max-width:1280px;margin:0 auto;padding:0 24px 100px;}",
@@ -2231,14 +2470,15 @@ function Styles() {
     ".sidebar-brand-title{font-size:18px;font-weight:800;color:var(--text);}",
     ".sidebar-brand-sub{font-size:13px;color:var(--text2);}",
     ".sidebar-group{display:grid;gap:6px;padding:12px;}",
-    ".sidebar-link{font-family:var(--ff);font-size:14px;font-weight:700;padding:13px 14px;border:none;border-radius:16px;background:transparent;color:var(--text2);text-align:left;cursor:pointer;transition:all .18s;}",
+    ".sidebar-link{font-family:var(--ff);font-size:14px;font-weight:700;padding:13px 14px;border:none;border-radius:16px;background:transparent;color:var(--text2);text-align:left;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:12px;}",
     ".sidebar-link:hover,.sidebar-link-on{background:linear-gradient(135deg,rgba(108,99,255,.14),rgba(45,212,191,.14));color:var(--text);}",
-    ".sidebar-note{padding:18px 20px;display:grid;gap:8px;}",
-    ".sidebar-note-kicker{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent2);}",
-    ".sidebar-note p{font-size:13px;color:var(--text2);line-height:1.6;}",
+    ".sidebar-link-icon{font-size:20px;flex-shrink:0;}",
+    ".sidebar-link-desc{font-size:11px;color:var(--text3);font-weight:400;margin-top:2px;}",
+    ".sidebar-credit-card{background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:0 10px 30px rgba(15,23,42,.05);padding:18px 20px;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text2);font-weight:600;}",
+    ".sidebar-credit-card strong{color:var(--accent);font-weight:800;}",
     ".home-hero{padding:36px 0 22px;}",
     ".home-title{font-size:28px;font-weight:800;margin-bottom:18px;}",
-    ".dashboard-hero{background:linear-gradient(135deg,#ffffff,#eef2ff 60%,#ecfeff);border:1px solid var(--border);border-radius:28px;box-shadow:0 18px 40px rgba(15,23,42,.06);}",
+    ".dashboard-hero{background:linear-gradient(135deg,#ffffff,#ecfdf5 60%,#ccfbf1);border:1px solid var(--border);border-radius:28px;box-shadow:0 18px 40px rgba(15,23,42,.06);}",
     ".compact-hero{padding-bottom:28px;}",
     ".dashboard-title{font-size:clamp(30px,4vw,44px);font-weight:800;line-height:1.08;color:var(--text);max-width:12ch;}",
     ".dashboard-copy{font-size:15px;line-height:1.7;color:var(--text2);margin-top:12px;max-width:64ch;}",
@@ -2249,15 +2489,38 @@ function Styles() {
     ".launch-card strong{font-size:30px;font-weight:800;line-height:1.1;}",
     ".launch-card span{font-size:14px;line-height:1.6;}",
     ".launch-kicker{font-size:11px!important;font-weight:800!important;letter-spacing:.08em;text-transform:uppercase;opacity:.82;}",
-    ".launch-card-manual{background:linear-gradient(135deg,#1d4ed8,#2563eb 55%,#38bdf8);color:#fff;}",
-    ".launch-card-ai{background:linear-gradient(135deg,#6d28d9,#7c3aed 58%,#ec4899);color:#fff;}",
+    ".launch-card-manual{background:linear-gradient(135deg,#0d9488,#14b8a6 55%,#2dd4bf);color:#fff;}",
+    ".launch-card-ai{background:linear-gradient(135deg,#0f766e,#0d9488 58%,#5eead4);color:#fff;}",
     ".launch-card-featured{transform:scale(1.04);box-shadow:0 24px 48px rgba(109,40,217,.25),0 0 0 2px rgba(124,58,237,.3);position:relative;overflow:hidden;}",
     ".launch-card-featured::before{content:'おすすめ';position:absolute;top:12px;right:-28px;background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:800;padding:3px 32px;transform:rotate(40deg);letter-spacing:.06em;backdrop-filter:blur(4px);}",
     ".launch-card-featured:hover{transform:scale(1.06);box-shadow:0 28px 54px rgba(109,40,217,.3),0 0 0 2px rgba(124,58,237,.4);}",
     ".stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:24px;}",
-    ".stat-chip{display:grid;gap:4px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.9);border:1px solid rgba(108,99,255,.12);}",
+    ".stat-chip{display:grid;gap:4px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.9);border:1px solid rgba(13,148,136,.12);}",
     ".stat-chip strong{font-size:24px;font-weight:800;color:var(--text);}",
     ".stat-chip span{font-size:13px;color:var(--text2);}",
+    // quick generate
+    ".quick-gen-box{margin-top:22px;display:grid;gap:12px;}",
+    ".quick-gen-input-row{display:flex;gap:10px;align-items:stretch;}",
+    ".quick-gen-input{flex:1;padding:14px 18px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface);font-family:var(--ff);font-size:16px;color:var(--text);outline:none;transition:border-color .2s;}",
+    ".quick-gen-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);}",
+    ".quick-gen-input:disabled{opacity:.6;}",
+    ".quick-gen-btn{font-size:15px;padding:14px 22px;border-radius:14px;flex-shrink:0;}",
+    ".quick-gen-btn:disabled{opacity:.45;cursor:default;}",
+    ".quick-gen-samples{display:flex;flex-wrap:wrap;gap:8px;}",
+    ".sample-chip{font-family:var(--ff);font-size:13px;font-weight:700;padding:7px 14px;border-radius:999px;border:1.5px solid var(--border2);background:rgba(255,255,255,.85);color:var(--text2);cursor:pointer;transition:all .18s;}",
+    ".sample-chip:hover:not(:disabled){border-color:var(--accent);background:var(--accent-dim);color:var(--accent);}",
+    ".sample-chip:disabled{opacity:.5;cursor:default;}",
+    ".quick-gen-error{color:#b91c1c;background:#fee2e2;padding:10px 14px;border-radius:10px;font-size:14px;}",
+    ".quick-result-panel{margin-top:20px;background:rgba(255,255,255,.95);border:1.5px solid var(--border2);border-radius:20px;padding:20px;display:grid;gap:16px;}",
+    ".quick-result-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}",
+    ".quick-result-name{font-size:18px;font-weight:800;color:var(--text);}",
+    ".quick-result-meta{font-size:14px;color:var(--text2);}",
+    ".quick-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;max-height:320px;overflow-y:auto;padding-right:4px;}",
+    ".quick-card-item{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:grid;gap:6px;}",
+    ".quick-card-word{font-size:15px;font-weight:700;color:var(--text);}",
+    ".quick-card-def{font-size:13px;color:var(--text2);line-height:1.5;}",
+    ".quick-result-footer{display:flex;gap:10px;flex-wrap:wrap;}",
+    "@media(max-width:600px){.quick-gen-input-row{flex-direction:column;}.quick-gen-btn{width:100%;}.quick-cards-grid{grid-template-columns:1fr;}}",
     ".filter-tabs{display:flex;gap:4px;background:var(--surface);border-radius:12px;padding:4px;width:fit-content;border:1px solid var(--border);}",
     ".ftab{font-family:var(--ff);font-size:14px;font-weight:600;padding:7px 20px;border-radius:9px;border:none;background:transparent;color:var(--text2);cursor:pointer;transition:all .2s;}",
     ".ftab-on{background:var(--accent)!important;color:#fff!important;}",
@@ -2326,12 +2589,12 @@ function Styles() {
     ".tpill-on{background:var(--accent-dim)!important;}",
     // detail
     ".detail-page{max-width:1200px;}",
-    ".set-header-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;background:linear-gradient(135deg,#ffffff,#eef2ff 60%,#f8fafc);border:1px solid var(--border);border-radius:28px;box-shadow:0 18px 40px rgba(15,23,42,.06);margin-top:32px;}",
+    ".set-header-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;background:linear-gradient(135deg,#ffffff,#ecfdf5 60%,#f0fdfa);border:1px solid var(--border);border-radius:28px;box-shadow:0 18px 40px rgba(15,23,42,.06);margin-top:32px;}",
     ".set-header-main{min-width:0;}",
     ".set-header-title{font-size:clamp(30px,4vw,44px);font-weight:800;line-height:1.08;color:var(--text);}",
     ".set-header-copy{margin-top:12px;font-size:15px;line-height:1.7;color:var(--text2);max-width:62ch;}",
     ".set-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:22px;}",
-    ".set-meta-card{display:grid;gap:6px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.92);border:1px solid rgba(108,99,255,.12);}",
+    ".set-meta-card{display:grid;gap:6px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.92);border:1px solid rgba(13,148,136,.12);}",
     ".set-meta-card span{font-size:12px;font-weight:700;color:var(--text2);}",
     ".set-meta-card strong{font-size:20px;font-weight:800;color:var(--text);line-height:1.3;}",
     ".detail-tags{margin-top:16px;}",
@@ -2368,7 +2631,7 @@ function Styles() {
     ".preview-card.flipped .preview-inner{transform:rotateY(180deg);}",
     ".preview-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:var(--r);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;}",
     ".preview-front{background:var(--surface);border:1.5px solid var(--border);}",
-    ".preview-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#9333ea);}",
+    ".preview-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#2dd4bf);}",
     ".preview-lang{font-size:11px;color:var(--text3);margin-bottom:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}",
     ".preview-word{font-size:clamp(20px,4vw,36px);font-weight:800;text-align:center;color:var(--text);}",
     ".preview-def{font-size:clamp(13px,2vw,17px);text-align:center;color:#fff;line-height:1.6;}",
@@ -2378,7 +2641,7 @@ function Styles() {
     ".card-row{display:grid;grid-template-columns:32px 1fr 18px 1fr 86px;align-items:start;gap:10px;padding:12px 14px;background:var(--surface);border-radius:var(--r-sm);border:1px solid transparent;transition:background .15s;}",
     ".card-row:hover{background:var(--surface2);border-color:var(--border);}",
     ".card-row-editing{background:var(--surface2)!important;border:1.5px solid var(--accent)!important;grid-template-columns:32px 1fr 56px!important;}",
-    ".card-row-adding{background:rgba(108,99,255,.04)!important;border:1.5px dashed var(--accent)!important;grid-template-columns:32px 1fr 56px!important;}",
+    ".card-row-adding{background:rgba(13,148,136,.04)!important;border:1.5px dashed var(--accent)!important;grid-template-columns:32px 1fr 56px!important;}",
     ".ctr-num{font-size:11px;color:var(--text3);font-weight:600;padding-top:3px;}",
     ".ctr-edit-btn{font-family:var(--ff);font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1.5px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;align-self:center;}",
     ".ctr-edit-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}",
@@ -2423,7 +2686,7 @@ function Styles() {
     ".gen-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;}",
     ".gen-msg{display:flex;gap:10px;align-items:flex-start;}",
     ".gen-msg-user{flex-direction:row-reverse;}",
-    ".gen-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#9333ea);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}",
+    ".gen-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#2dd4bf);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}",
     ".gen-avatar-user{background:var(--surface3);border:1px solid var(--border);}",
     ".gen-bubble{background:var(--surface2);border:1px solid var(--border);border-radius:14px;border-top-left-radius:4px;padding:12px 16px;max-width:85%;font-size:14px;line-height:1.6;color:var(--text);}",
     ".gen-msg-user .gen-bubble{background:var(--accent);color:#fff;border-color:var(--accent);border-top-right-radius:4px;border-top-left-radius:14px;}",
@@ -2479,7 +2742,7 @@ function Styles() {
     ".detail-flip-card.flipped .detail-flip-inner{transform:rotateY(180deg);}",
     ".detail-flip-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;display:flex;align-items:center;justify-content:center;padding:36px;box-shadow:0 4px 24px rgba(0,0,0,.1);}",
     ".detail-flip-front{background:var(--surface);border:1.5px solid var(--border);}",
-    ".detail-flip-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#7c3aed);}",
+    ".detail-flip-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#2dd4bf);}",
     ".detail-flip-text{font-size:clamp(18px,4vw,32px);font-weight:700;text-align:center;color:var(--text);line-height:1.5;word-break:break-word;overflow-y:auto;max-height:100%;}",
     ".detail-flip-back .detail-flip-text{color:#fff;}",
     ".detail-flip-nav{display:flex;align-items:center;gap:28px;justify-content:center;}",
@@ -2491,7 +2754,7 @@ function Styles() {
     ".flip-card.flipped .flip-card-inner{transform:rotateY(180deg);}",
     ".flip-card-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;display:flex;align-items:center;justify-content:center;padding:40px;box-shadow:0 4px 24px rgba(0,0,0,.12);}",
     ".flip-card-front{background:var(--surface);border:1.5px solid var(--border);}",
-    ".flip-card-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#7c3aed);}",
+    ".flip-card-back{transform:rotateY(180deg);background:linear-gradient(135deg,var(--accent),#2dd4bf);}",
     ".flip-card-text{font-size:clamp(20px,4.5vw,36px);font-weight:700;text-align:center;color:var(--text);line-height:1.5;word-break:break-word;overflow-y:auto;max-height:100%;}",
     ".flip-card-back .flip-card-text{color:#fff;}",
     ".flip-nav-row{display:flex;align-items:center;gap:32px;justify-content:center;}",
@@ -2560,7 +2823,7 @@ function Styles() {
     // --- tablet ---
     "@media(max-width:1100px){.app-shell{grid-template-columns:1fr;}.app-sidebar{position:static;}.sidebar-group{grid-template-columns:repeat(2,minmax(0,1fr));}.set-header-card,.detail-layout{grid-template-columns:1fr;}.set-action-row{min-width:0;flex-direction:row;flex-wrap:wrap;}.set-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}",
     // --- mobile-medium ---
-    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.choice-grid{grid-template-columns:1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
+    "@media(max-width:860px){.study-set-card{grid-template-columns:1fr;}.study-set-thumb{min-height:120px;}.term-row{grid-template-columns:1fr;gap:8px;}.term-row-editing{grid-template-columns:1fr;}.term-edit-grid{grid-template-columns:1fr;}.term-actions{justify-content:flex-start;}.navbar{grid-template-columns:auto 1fr;gap:8px;padding:10px 14px;}.navbar-center{display:none;}.navbar-right{justify-content:flex-end;}.section-head{align-items:flex-start;flex-direction:column;}.app-sidebar{display:none;}.hamburger-btn{display:flex;}.choice-grid{grid-template-columns:1fr;}.card-row{grid-template-columns:28px 1fr;gap:8px;padding:10px;}.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-edit-btn,.card-row:not(.card-row-editing):not(.card-row-adding) .ctr-del-btn{align-self:start;}.set-action-row{flex-direction:column;gap:8px;}.set-action-row .nbtn{width:100%;text-align:center;}}",
     // --- mobile-small ---
     "@media(max-width:640px){.page-shell,.page{padding:0 12px 72px;}.dashboard-title,.set-header-title{max-width:none;font-size:clamp(24px,6vw,36px);}.launch-grid,.stats-row,.set-meta-grid{grid-template-columns:1fr;}.sidebar-group{grid-template-columns:1fr;}.study-set-content{padding:14px 16px;}.launch-card strong{font-size:22px;}.launch-card{padding:18px 16px 16px;}.launch-card span{font-size:13px;}.dashboard-hero{padding:18px 16px;border-radius:20px;}.set-header-card{padding:18px 16px;border-radius:20px;margin-top:16px;gap:16px;}.section-heading{font-size:22px;}.dashboard-copy,.set-header-copy{font-size:14px;}.stat-chip{padding:10px 12px;}.stat-chip strong{font-size:20px;}.nbtn{padding:8px 14px;font-size:13px;}.credit-badge{padding:6px 10px;font-size:12px;}.set-meta-card strong{font-size:16px;}.set-meta-card span{font-size:11px;}.set-meta-card{padding:10px 12px;}.mode-grid{grid-template-columns:1fr;}.mode-big-btn{padding:16px 18px;}.quiz-card{padding:28px 20px;min-height:120px;}.flip-card{width:min(620px,calc(100vw - 32px));height:min(360px,60vh);}.detail-flip-card{width:min(520px,calc(100vw - 32px));height:min(300px,55vh);}.flip-view-body{padding:20px 12px;gap:20px;}.quiz-body{padding:12px;gap:10px;}.study-wrap{padding:20px 12px;gap:16px;}.result-summary-card{padding:24px 18px;}.filter-tabs{width:100%;}.ftab{flex:1;text-align:center;padding:7px 12px;}.test-submenu-card{padding:22px 18px;}.gen-input-row{padding:10px;}.gen-messages{padding:14px;}.gen-preview-panel{padding:14px;}.study-set-title{font-size:18px;}.study-set-meta{font-size:13px;}.study-set-card{border-radius:18px;}.terms-panel{padding:18px 14px;}.term-index{width:30px;height:30px;font-size:11px;border-radius:9px;}.term-value{font-size:14px;}.create-name-input{font-size:20px;}.settings-card{padding:14px 16px;}.card-card{padding:16px;}.hero-panel,.card-card,.terms-panel,.composer-panel{border-radius:18px;}.study-nav{padding:10px 14px;}.flip-nav-row{gap:20px;}.result-donut-row{gap:20px;flex-wrap:wrap;}}",
     // --- extra-small (iPhone SE etc) ---
