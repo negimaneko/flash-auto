@@ -49,6 +49,22 @@ npm run dev   # http://localhost:5173 で起動
 | `SUPABASE_URL` | SupabaseプロジェクトURL | 共有キャッシュ使用時 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase認証キー | 共有キャッシュ使用時 |
 
+## 環境変数（.env.local）追記
+| 変数名 | 用途 | 必須 |
+|--------|------|------|
+| `GEMINI_API_KEY` | Gemini APIキー（デッキ生成用） | Gemini使用時 |
+
+## AIプロバイダー構成（GEMINI_API_KEY設定後）
+| 用途 | モデル | 経路 |
+|------|--------|------|
+| デッキ生成 | Gemini 2.5 Flash-Lite | `deck-cache.js` → `_shared/gemini.js` |
+| キャラクター検証 | Groq (Llama 3.3 70B) | `deck-cache.js` → `_shared/groq.js` |
+| 単語定義（callAI） | Ollama → Groq → Gemini | `src/api.js` のフォールバックチェーン |
+
+## 保留タスク
+- [ ] **GEMINI_API_KEYを.env.localに追加した直後に `API.md` を作成すること**
+  - 内容: デッキ生成=Gemini 2.5 Flash-Lite（deck-cache.js→_shared/gemini.js）、キャラクター検証=Groq Llama 3.3 70B（deck-cache.js→_shared/groq.js）、単語定義callAI=Ollama→Groq→Gemini
+
 ## 禁止事項
 - 存在しない情報を生成するな
 - 未確認の内容を事実として書くな

@@ -469,6 +469,7 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
   const [quickResult, setQuickResult] = useState(null);
   const [quickError, setQuickError] = useState("");
   const appOpenRef = useRef(Date.now());
+
   const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎"];
 
   const handleQuickGenerate = async () => {
@@ -584,7 +585,12 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
                   className="quick-gen-input"
                   value={quickTopic}
                   onChange={e => setQuickTopic(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !quickLoading && quickTopic.trim() && quickTopic.length <= LIMITS.TOPIC && handleQuickGenerate()}
+                  onKeyDown={e => {
+                    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                    if (!quickLoading && quickTopic.trim() && quickTopic.length <= LIMITS.TOPIC) {
+                      handleQuickGenerate();
+                    }
+                  }}
                   placeholder="例：量子力学、TOEFL、経済学..."
                   disabled={quickLoading}
                   style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
