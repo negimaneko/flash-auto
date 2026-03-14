@@ -82,6 +82,7 @@ export async function aiSuggest({ term, wordLang, defLang, detailLevel, deckName
   const lvl = DETAIL_LEVELS.find((l) => l.id === detailLevel) || DETAIL_LEVELS[1];
   const context = (otherWords || []).filter(Boolean).slice(0, 12).join(", ");
   const isTechnical = normalizedWordLang === "technical";
+  const noWordInDefRule = `CRITICAL: NEVER include the word "${term}" in the definition. Do not write "${term}とは", "${term}は", "${term} is", "${term} refers to", or any phrase containing "${term}". Write as if the word is hidden.`;
   const prompt = isTechnical
     ? [
         `Define the technical term "${term}" as it is commonly used in Japan, and write the definition in ${dl}.`,
@@ -89,12 +90,13 @@ export async function aiSuggest({ term, wordLang, defLang, detailLevel, deckName
         context ? `Related words: ${context}` : "",
         lvl.id === 1 ? "Return one short sentence." : lvl.id === 2 ? "Return 2-3 sentences." : "Return 4-6 sentences with examples.",
         `Use assertive, dictionary-style tone (断定・体言止め). Never use polite form (ですます調). Example: "〜すること。" "〜を指す。" "〜の手法。"`,
-        `Do NOT start with the term name or "〜とは". Start directly with the definition content. For example, instead of "パーソンセンタードセラピーとは、カール・ロジャーズが..." write "カール・ロジャーズが..."`,
+        noWordInDefRule,
         "Return the definition only.",
       ].filter(Boolean).join("\n")
     : [
         `Translate the ${wl} word "${term}" into ${dl}.`,
         `Return only the translated word or short phrase in ${dl}. Do not add any explanation, examples, or extra sentences.`,
+        noWordInDefRule,
         context ? `Context (related words in this deck): ${context}` : "",
       ].filter(Boolean).join("\n");
   const maxTk = isTechnical
@@ -110,7 +112,10 @@ export async function aiSuggest({ term, wordLang, defLang, detailLevel, deckName
       ai_provider: provider,
       fallback_used: fallbackUsed,
     });
-    return text.trim();
+    // 単語が定義の冒頭に含まれる場合は後処理で除去
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`^${escaped}\\s*(?:とは|は|：|:|-|—|\\(|（|、|,)?\\s*`, "i");
+    return text.trim().replace(pattern, "").trim() || text.trim();
   } catch (e) {
     trackEvent("generate_word", {
       input_word: term,

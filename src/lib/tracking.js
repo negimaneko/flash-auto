@@ -8,9 +8,9 @@
  * - trackEvent() 経由でサーバーにイベントを送信
  */
 
-const ANON_ID_KEY = "mnemox_anon_id";
+const ANON_ID_KEY = "flash_auto_anon_id";
 const LEGACY_KEY = "flash auto-anonymous-user-id"; // 旧キー（スペースあり）移行用
-const INTERNAL_KEY = "mnemox_internal"; // 開発者・内部ユーザー用フラグ
+const INTERNAL_KEY = "flash_auto_internal"; // 開発者・内部ユーザー用フラグ
 
 function buildAnonymousUserId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -60,7 +60,7 @@ export function getAnonymousUserId() {
 
 /**
  * 内部ユーザー（開発者・テスター）かどうかを判定する。
- * ブラウザのコンソールで localStorage.setItem("mnemox_internal", "true") を実行すると内部ユーザーになる。
+ * ブラウザのコンソールで localStorage.setItem("flash_auto_internal", "true") を実行すると内部ユーザーになる。
  */
 export function isInternalUser() {
   if (typeof window === "undefined") return false;
@@ -86,7 +86,7 @@ export function markAsInternal() {
 
 // グローバルに公開（開発者がコンソールから簡単に呼べるように）
 if (typeof window !== "undefined") {
-  window.mnemoxMarkInternal = markAsInternal;
+  window.flashAutoMarkInternal = markAsInternal;
 }
 
 /**

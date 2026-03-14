@@ -1,8 +1,14 @@
-export async function requestGroqChat({ prompt, maxTokens = 1024 }) {
+export async function requestGroqChat({ prompt, maxTokens = 1024, systemPrompt, temperature }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     throw new Error("GROQ_API_KEY not configured");
   }
+
+  const messages = [];
+  if (systemPrompt) {
+    messages.push({ role: "system", content: systemPrompt });
+  }
+  messages.push({ role: "user", content: prompt });
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -12,9 +18,9 @@ export async function requestGroqChat({ prompt, maxTokens = 1024 }) {
     },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
+      messages,
       max_tokens: maxTokens,
-      temperature: 0.7,
+      temperature: temperature ?? 0.7,
     }),
   });
 

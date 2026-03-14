@@ -27,7 +27,7 @@ export class ErrorBoundary extends Component {
   };
 
   handleFullReset = () => {
-    try { localStorage.removeItem("mnemox_decks"); } catch {}
+    try { localStorage.removeItem("flash_auto_decks"); } catch {}
     window.location.reload();
   };
 
@@ -173,7 +173,7 @@ function SplashScreen() {
 export default function App() {
   const [decks, setDecks] = useState(() => {
     try {
-      const saved = localStorage.getItem("mnemox_decks");
+      const saved = localStorage.getItem("flash_auto_decks");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -214,7 +214,7 @@ export default function App() {
   // decksが変わるたびにlocalStorageに保存
   useEffect(() => {
     try {
-      localStorage.setItem("mnemox_decks", JSON.stringify(decks));
+      localStorage.setItem("flash_auto_decks", JSON.stringify(decks));
     } catch (e) {
       // 容量オーバーなどで保存できなくても、アプリは止めない
     }

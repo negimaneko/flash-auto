@@ -46,6 +46,15 @@ function parseDeckPayload(raw) {
   return JSON.parse(cleaned);
 }
 
+function stripWordFromDefinition(word, definition) {
+  if (!word || !definition) return definition;
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // 「単語とは〜」「単語は〜」「単語：〜」などのパターンを冒頭から除去
+  const pattern = new RegExp(`^${escaped}\\s*(?:とは|は|：|:|-|—|\\(|（|、|,)?\\s*`, "i");
+  const stripped = definition.replace(pattern, "").trim();
+  return stripped || definition;
+}
+
 function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
   const excluded = new Set(excludedWords.map(normalizeWordKey));
   const seen = new Set();
@@ -54,7 +63,7 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
     .filter((card) => card?.word && card?.definition)
     .map((card) => ({
       word: String(card.word).trim(),
-      definition: String(card.definition).trim(),
+      definition: stripWordFromDefinition(String(card.word).trim(), String(card.definition).trim()),
     }))
     .filter((card) => {
       const key = normalizeWordKey(card.word);
@@ -70,6 +79,17 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
 
   return sanitized;
 }
+
+const DECK_SYSTEM_PROMPT = [
+  "You are a factual flashcard generator.",
+  "CRITICAL RULES:",
+  "- Only output information you are confident is accurate.",
+  "- NEVER invent or fabricate names, terms, or definitions.",
+  "- If the topic asks about specific items (e.g. characters, people, cities, species), list ONLY real, verifiable items that belong to that category.",
+  "- Do NOT include generic/peripheral concepts (e.g. 'merchandise', 'fan art', 'collaboration', 'pop culture') unless the topic explicitly asks for them.",
+  "- If you cannot confidently list 10 accurate items, return fewer. Accuracy is more important than quantity.",
+  "- Each definition must describe the specific item in the 'word' field, not the broader topic.",
+].join("\n");
 
 function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords }) {
   const detailInstructions = detailLevel === 1
@@ -88,13 +108,11 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustInclude
 
   return [
     `Create a study flashcard deck about: ${topic}`,
-    "Number of cards: 10 to 15.",
-    "You must always return at least 10 cards in the cards array.",
-    "Start from the 10 most important cards.",
-    "If there are additional must-know terms that do not fit within those 10, you may add up to 5 extra cards.",
-    "Only add extra cards when they are clearly essential.",
-    "Never return fewer than 10 cards, and never return more than 15 cards.",
-    "Each card's 'word' field must be a specific term, concept, or vocabulary word — NOT the topic title or a phrase like 'Introduction to X' or 'Overview of X'. The word must be something a learner would look up in a dictionary or glossary.",
+    "Number of cards: 10 to 15, but accuracy comes first — return fewer if you are not confident.",
+    "Each card's 'word' field must be a specific, real item that directly belongs to the topic.",
+    "If the topic is about characters, list actual character names. If the topic is about a field of study, list key terms. If the topic is about places, list actual place names.",
+    "Do NOT include generic peripheral words like 'merchandise', 'fan art', 'collaboration', 'pop culture', or 'character goods' — only include items that ARE the topic's core content.",
+    "CRITICAL: The definition must NEVER start with or contain the word/term itself. Do NOT write '〜とは', '〜は', 'X is', 'X refers to', or any variation that includes the word. Write as if the word is hidden — define the concept without naming it.",
     mustIncludeInstruction,
     wordLangInstruction,
     `Definition language: ${defLang}`,
@@ -117,9 +135,10 @@ function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existi
   return [
     `Continue a study flashcard deck about: ${topic}`,
     `Already generated words: ${existingWords.join(", ")}`,
-    "Generate 5 to 10 additional cards.",
+    "Generate 5 to 10 additional cards, but accuracy comes first — return fewer if you are not confident.",
     "Every new card must be a new term and must not duplicate or paraphrase any existing word.",
-    "Only add genuinely useful next-step terms that expand the deck.",
+    "Each card's 'word' must be a specific, real item that directly belongs to the topic — no generic peripheral concepts.",
+    "CRITICAL: The definition must NEVER start with or contain the word/term itself. Do NOT write '〜とは', '〜は', 'X is', 'X refers to', or any variation that includes the word. Write as if the word is hidden — define the concept without naming it.",
     wordLangInstruction,
     `Definition language: ${defLang}`,
     detailInstructions,
@@ -200,21 +219,21 @@ async function fetchCachedDeckById(supabase, cacheId) {
 async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords }) {
   const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
   const maxTokens = detailLevel === 3 ? 6000 : 4000;
-  const raw = await requestGroqChat({ prompt, maxTokens });
+  const raw = await requestGroqChat({ prompt, maxTokens, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
 
   return {
     deckName: String(parsed.deckName || "").trim() || "AI生成単語帳",
     tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 10) : [],
-    cards: sanitizeCards(parsed.cards, 10, 15),
+    cards: sanitizeCards(parsed.cards, 5, 15),
   };
 }
 
 async function generateContinuationCards({ topic, wordLang, defLang, detailLevel, existingWords }) {
   const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords });
-  const raw = await requestGroqChat({ prompt, maxTokens: 2500 });
+  const raw = await requestGroqChat({ prompt, maxTokens: 2500, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
-  return sanitizeCards(parsed.cards, 5, 10, existingWords);
+  return sanitizeCards(parsed.cards, 3, 10, existingWords);
 }
 
 export default async function handler(req, res) {
@@ -392,3 +411,6 @@ export default async function handler(req, res) {
     return res.status(status).json({ error: message });
   }
 }
+
+// テスト用export
+export { parseDeckPayload, sanitizeCards, buildInitialPrompt, buildContinuationPrompt, stripWordFromDefinition, DECK_SYSTEM_PROMPT };
