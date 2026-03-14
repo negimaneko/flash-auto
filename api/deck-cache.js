@@ -32,7 +32,17 @@ function getTodayKey() {
 }
 
 function parseDeckPayload(raw) {
-  const cleaned = String(raw || "").split("```json").join("").split("```").join("").trim();
+  let cleaned = String(raw || "");
+  // Remove <think>...</think> blocks (some reasoning models include these)
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  // Remove markdown code fences
+  cleaned = cleaned.split("```json").join("").split("```").join("").trim();
+  // Extract the first JSON object found
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.slice(start, end + 1);
+  }
   return JSON.parse(cleaned);
 }
 
@@ -61,7 +71,7 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
   return sanitized;
 }
 
-function buildInitialPrompt({ topic, wordLang, defLang, detailLevel }) {
+function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords }) {
   const detailInstructions = detailLevel === 1
     ? "Each definition should be one short sentence."
     : detailLevel === 2
@@ -72,6 +82,10 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel }) {
     ? `Word/term language: ${wordLang} (write each word/term in ${wordLang}).`
     : "Words/terms should be in the original language commonly used for the topic.";
 
+  const mustIncludeInstruction = mustIncludeWords
+    ? `You MUST include cards for all of the following words/terms (in addition to other important terms): ${mustIncludeWords}. These are required — do not skip any of them.`
+    : null;
+
   return [
     `Create a study flashcard deck about: ${topic}`,
     "Number of cards: 10 to 15.",
@@ -80,11 +94,13 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel }) {
     "If there are additional must-know terms that do not fit within those 10, you may add up to 5 extra cards.",
     "Only add extra cards when they are clearly essential.",
     "Never return fewer than 10 cards, and never return more than 15 cards.",
+    "Each card's 'word' field must be a specific term, concept, or vocabulary word — NOT the topic title or a phrase like 'Introduction to X' or 'Overview of X'. The word must be something a learner would look up in a dictionary or glossary.",
+    mustIncludeInstruction,
     wordLangInstruction,
     `Definition language: ${defLang}`,
     detailInstructions,
     'Return JSON only: {"deckName":"...","tags":["#tag1","#tag2"],"cards":[{"word":"...","definition":"..."}]}',
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords }) {
@@ -181,9 +197,10 @@ async function fetchCachedDeckById(supabase, cacheId) {
   return data?.[0] || null;
 }
 
-async function generateInitialDeck({ topic, wordLang, defLang, detailLevel }) {
-  const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel });
-  const raw = await requestGroqChat({ prompt, maxTokens: 4000 });
+async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords }) {
+  const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
+  const maxTokens = detailLevel === 3 ? 6000 : 4000;
+  const raw = await requestGroqChat({ prompt, maxTokens });
   const parsed = parseDeckPayload(raw);
 
   return {
@@ -212,9 +229,12 @@ export default async function handler(req, res) {
   const defLang = normalizeLanguageValue(req.body?.defLang);
   const detailLevel = Number(req.body?.detailLevel || 2);
   const userId = String(req.body?.userId || "").trim();
+  const mustIncludeWords = String(req.body?.mustIncludeWords || "").trim();
   const usageDate = getTodayKey();
 
   if (!topic) return res.status(400).json({ error: "topic is required" });
+  if (topic.length > 200) return res.status(400).json({ error: "テーマは200文字以内で入力してください" });
+  if (mustIncludeWords.length > 200) return res.status(400).json({ error: "「必ず含める単語」は200文字以内で入力してください" });
   if (!userId) return res.status(400).json({ error: "userId is required" });
 
   try {
@@ -224,7 +244,7 @@ export default async function handler(req, res) {
     // --- Supabase未設定時: キャッシュ・クレジットなしで直接生成 ---
     if (!supabase) {
       if (action === "initial") {
-        const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel });
+        const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
         return res.status(200).json({
           source: "generated",
           remainingCredits: null,
@@ -267,19 +287,22 @@ export default async function handler(req, res) {
 
     // --- Supabase設定済み: キャッシュ・クレジットあり ---
     if (action === "initial") {
-      const cached = await fetchCachedDeck(supabase, topicKey, defLang);
       const remainingCredits = Math.max(0, DAILY_CREDIT_LIMIT - await readCredits(supabase, userId, usageDate));
 
-      if (cached) {
-        return res.status(200).json({
-          source: "cache",
-          remainingCredits,
-          ...mapDeckRow(cached, detailLevel),
-        });
+      // mustIncludeWords が指定されている場合はキャッシュを使わず新規生成
+      if (!mustIncludeWords) {
+        const cached = await fetchCachedDeck(supabase, topicKey, defLang);
+        if (cached) {
+          return res.status(200).json({
+            source: "cache",
+            remainingCredits,
+            ...mapDeckRow(cached, detailLevel),
+          });
+        }
       }
 
       const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate);
-      const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel });
+      const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
 
       const { data, error } = await supabase
         .from("deck_cache")

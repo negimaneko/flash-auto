@@ -135,6 +135,18 @@ const toLanguageInputValue = (value, fallback = "ja") =>
   getLangLabel(normalizeLanguageValue(value, fallback));
 const AI_GENERATE_DAILY_LIMIT = 3;
 
+const LIMITS = { NAME: 50, TOPIC: 200, MUST: 200, WORD: 100, DEF: 500 };
+function CharCount({ value, max }) {
+  const n = (value || "").length;
+  const over = n > max;
+  return (
+    <span style={{ fontSize: 11, color: over ? "var(--red)" : "var(--text3)", alignSelf: "flex-end" }}>
+      {over && <span style={{ marginRight: 4 }}>⚠ {max}文字以内で入力してください</span>}
+      {n}/{max}
+    </span>
+  );
+}
+
 const DETAIL_LEVELS = [
   { id: 1, label: "短め", desc: "短い1文" },
   { id: 2, label: "標準", desc: "2〜3文" },
@@ -899,14 +911,16 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
                   className="quick-gen-input"
                   value={quickTopic}
                   onChange={e => setQuickTopic(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleQuickGenerate()}
+                  onKeyDown={e => e.key === "Enter" && !quickLoading && quickTopic.trim() && quickTopic.length <= LIMITS.TOPIC && handleQuickGenerate()}
                   placeholder="例：量子力学、TOEFL、経済学..."
                   disabled={quickLoading}
+                  style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
                 />
-                <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim()}>
+                <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
                   {quickLoading ? "生成中..." : "✨ 生成"}
                 </button>
               </div>
+              {quickTopic.length > 0 && <div style={{ display:"flex", justifyContent:"flex-end", marginTop:2 }}><CharCount value={quickTopic} max={LIMITS.TOPIC} /></div>}
               <div className="quick-gen-samples">
                 {QUICK_SAMPLES.map(s => (
                   <button key={s} className="sample-chip" onClick={() => setQuickTopic(s)} disabled={quickLoading}>{s}</button>
@@ -1045,6 +1059,7 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
 // AI GENERATE VIEW
 function GenerateView({onSave,onBack,showToast}) {
   const [topic, setTopic] = useState("");
+  const [mustIncludeWords, setMustIncludeWords] = useState("");
   const [wordLang, setWordLang] = useState("technical");
   const [defLang, setDefLang] = useState("ja");
   const [detailLevel, setDetailLevel] = useState(2);
@@ -1158,6 +1173,7 @@ function GenerateView({onSave,onBack,showToast}) {
         defLang: normalizedDefLang,
         detailLevel,
         userId,
+        ...(mustIncludeWords.trim() ? { mustIncludeWords: mustIncludeWords.trim() } : {}),
       });
       applyGeneratedDeckResult(result.deck, result.cacheId, result.remainingCredits, normalizedDefLang);
       trackEvent("generate_theme_deck", {
@@ -1279,10 +1295,31 @@ function GenerateView({onSave,onBack,showToast}) {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="例：量子力学の入門（※1回につき10〜15枚のカードが生成されます）"
+              style={topic.length > LIMITS.TOPIC ? { borderColor: "var(--red)" } : {}}
             />
-            <span style={{ color: "var(--text3)", fontSize: 13 }}>
-              例：量子力学の入門（※1回につき10〜15枚のカードが生成されます）
-            </span>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ color: "var(--text3)", fontSize: 13 }}>
+                例：量子力学の入門（※1回につき10〜15枚のカードが生成されます）
+              </span>
+              <CharCount value={topic} max={LIMITS.TOPIC} />
+            </div>
+          </label>
+
+          <label style={{ display: "grid", gap: 8 }}>
+            <span>必ず含める単語 <span style={{ color: "var(--text3)", fontWeight: 400 }}>（任意）</span></span>
+            <input
+              className="settings-select"
+              value={mustIncludeWords}
+              onChange={(e) => setMustIncludeWords(e.target.value)}
+              placeholder="例：entropy, quantum, photon（カンマ区切りで入力）"
+              style={mustIncludeWords.length > LIMITS.MUST ? { borderColor: "var(--red)" } : {}}
+            />
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ color: "var(--text3)", fontSize: 13 }}>
+                入力した単語は必ず単語帳に含まれます
+              </span>
+              <CharCount value={mustIncludeWords} max={LIMITS.MUST} />
+            </div>
           </label>
 
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -1313,7 +1350,7 @@ function GenerateView({onSave,onBack,showToast}) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="nbtn primary" onClick={startGenerate} disabled={loading}>
+            <button className="nbtn primary" onClick={startGenerate} disabled={loading || !topic.trim() || topic.length > LIMITS.TOPIC || mustIncludeWords.length > LIMITS.MUST}>
               {loading ? "生成中..." : "単語帳を生成"}
             </button>
             <button className="nbtn" onClick={onBack}>キャンセル</button>
@@ -1350,15 +1387,22 @@ function GenerateView({onSave,onBack,showToast}) {
                     value={card.word}
                     onChange={(e) => updateCard(card.id, "word", e.target.value)}
                     placeholder="単語"
+                    style={card.word.length > LIMITS.WORD ? { borderColor:"var(--red)" } : {}}
                   />
+                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                    <CharCount value={card.word} max={LIMITS.WORD} />
+                  </div>
                   <textarea
                     className="settings-select"
                     value={card.definition}
                     onChange={(e) => updateCard(card.id, "definition", e.target.value)}
                     placeholder="定義"
                     rows={4}
-                    style={{ resize: "vertical" }}
+                    style={{ resize: "vertical", ...(card.definition.length > LIMITS.DEF ? { borderColor:"var(--red)" } : {}) }}
                   />
+                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                    <CharCount value={card.definition} max={LIMITS.DEF} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -1388,7 +1432,7 @@ function GenerateView({onSave,onBack,showToast}) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-            <button className="nbtn primary" onClick={saveDeck}>単語帳を保存</button>
+            <button className="nbtn primary" onClick={saveDeck} disabled={generated?.cards.some(c => c.word.length > LIMITS.WORD || c.definition.length > LIMITS.DEF)}>単語帳を保存</button>
             <button className="nbtn" onClick={startGenerate} disabled={loading}>再生成</button>
             <button className="nbtn" onClick={continueGenerate} disabled={continuing || loading || !generatedCacheId}>
               {continuing ? "追加生成中..." : "1クレジットで続きを5〜10枚追加"}
@@ -1871,6 +1915,10 @@ function CreateView({initial,onSave,onBack,showToast}) {
     }, 100);
   };
 
+  const nameOver = name.length > LIMITS.NAME;
+  const cardsHasError = cards.some(c => c.word.length > LIMITS.WORD || c.definition.length > LIMITS.DEF);
+  const saveDisabled = nameOver || cardsHasError;
+
   const handleSave=()=>{
     if(!name.trim()){
       showToast("単語帳名を入力してください","err");
@@ -1909,11 +1957,16 @@ function CreateView({initial,onSave,onBack,showToast}) {
       <Navbar
         left={<button className="nbtn ghost" onClick={onBack}>戻る</button>}
         center={<span className="nav-center-title">{isEdit ? "単語帳を編集" : "単語帳を作成"}</span>}
-        right={<button className="nbtn primary" onClick={handleSave}>保存</button>}
+        right={<button className="nbtn primary" onClick={handleSave} disabled={saveDisabled}>保存</button>}
       />
 
       <div style={{ maxWidth:800, margin:"0 auto", padding:"24px 0 100px" }}>
-        <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} />
+        <div style={{ position:"relative" }}>
+          <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} style={nameOver ? { borderColor:"var(--red)" } : {}} />
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
+            <CharCount value={name} max={LIMITS.NAME} />
+          </div>
+        </div>
 
         <div className="settings-card">
           <div className="create-lang-grid">
@@ -1984,12 +2037,18 @@ function CreateView({initial,onSave,onBack,showToast}) {
                 </div>
                 <div className="create-card-fields">
                   <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)", display:"flex", flexDirection:"column" }}>
-                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0 }} />
-                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>用語</div>
+                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.word.length>LIMITS.WORD?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6 }}>
+                      <div style={{ fontSize:12, color:"var(--muted)" }}>用語</div>
+                      <CharCount value={card.word} max={LIMITS.WORD} />
+                    </div>
                   </div>
                   <div style={{ flex:1, paddingLeft:16, display:"flex", flexDirection:"column" }}>
-                    <AutoTextarea className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} rows={1} style={{ width:"100%", border:"none", borderBottom:"2px solid var(--accent)", borderRadius:0, background:"transparent", paddingLeft:0, resize:"none", overflow:"hidden", fontFamily:"inherit", fontSize:"inherit", lineHeight:"1.5" }} />
-                    <div style={{ fontSize:12, color:"var(--muted)", marginTop:6 }}>{generatingCardId===card.id ? "AI生成中..." : "定義"}</div>
+                    <AutoTextarea className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} rows={1} style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.definition.length>LIMITS.DEF?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0, resize:"none", overflow:"hidden", fontFamily:"inherit", fontSize:"inherit", lineHeight:"1.5" }} />
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6 }}>
+                      <div style={{ fontSize:12, color:"var(--muted)" }}>{generatingCardId===card.id ? "AI生成中..." : "定義"}</div>
+                      <CharCount value={card.definition} max={LIMITS.DEF} />
+                    </div>
                   </div>
                 </div>
               </div>

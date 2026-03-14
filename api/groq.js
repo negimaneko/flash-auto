@@ -9,6 +9,7 @@ export default async function handler(req, res) {
 
   const { prompt, maxTokens } = req.body;
   if (!prompt) return res.status(400).json({ error: "prompt is required" });
+  if (typeof prompt !== "string" || prompt.length > 8000) return res.status(400).json({ error: "prompt is too long" });
 
   try {
     const text = await requestGroqChat({ prompt, maxTokens: maxTokens || 1024 });
