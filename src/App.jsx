@@ -248,6 +248,17 @@ export default function App() {
       card_count: normalizedDeck.cards.length,
     });
   };
+  const saveAndStartFlash = (deck) => {
+    const normalizedDeck = normalizeDeck(deck);
+    setDecks(prev=>[...prev, normalizedDeck]);
+    setActiveDeck(normalizedDeck);
+    setView("flip");
+    showToast("単語帳を保存しました");
+    trackEvent("save_deck", {
+      deck_id: normalizedDeck.id,
+      card_count: normalizedDeck.cards.length,
+    });
+  };
   const toggleFavorite = (id) => {
     setDecks(prev=>prev.map(d=>d.id===id
       ? {...d, favorited:!d.favorited, favCount:(d.favCount||0)+(d.favorited?-1:1)} : d));
@@ -311,7 +322,8 @@ export default function App() {
                                onEdit={d=>{setEditDeck(d);setView("create");}}
                                onDelete={id=>{setDecks(p=>p.filter(d=>d.id!==id));showToast("削除しました");}}
                                onMenuClick={()=>setMenuOpen(true)}
-                               onSaveGeneratedDeck={saveGeneratedDeck}/>}
+                               onSaveGeneratedDeck={saveGeneratedDeck}
+                               onSaveAndStartFlash={saveAndStartFlash}/>}
       {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)} credits={appCredits}/>}
       {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast} onCreditsUpdate={setAppCredits}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
@@ -319,7 +331,7 @@ export default function App() {
                                onStartMode={startMode}
                                onToggleFav={()=>toggleFavorite(activeDeck.id)}
                                onEdit={()=>{setEditDeck(syncActive(activeDeck.id));setView("create");}}
-                               onDelete={()=>{setDecks(p=>p.filter(d=>d.id!==activeDeck.id));showToast("削除しました");goHome();}}
+                               onDelete={()=>{if(!window.confirm("この単語帳を削除しますか？\nこの操作は元に戻せません"))return;setDecks(p=>p.filter(d=>d.id!==activeDeck.id));showToast("削除しました");goHome();}}
                                onUpdateCard={updateCard} onAddCard={addCard} onDeleteCard={deleteCard} showToast={showToast}/>}
       {view==="flip"      && activeDeck && <FlipView  deck={syncActive(activeDeck.id)} onBack={()=>{
         trackEvent("review_card", { deck_id: activeDeck.id, card_count: syncActive(activeDeck.id).cards.length, mode: "flip" });
@@ -335,7 +347,7 @@ export default function App() {
 function MobileDrawer({open,onClose,credits,onHome,onMyLibrary,onLibrary,onGenerate,onNew,activeView}) {
   const items = [
     { id:"home", label:"ホーム", icon:"🏠", action:onHome },
-    { id:"my-library", label:"ライブラリ", icon:"📚", desc:"作成・保存した学習セット", action:onMyLibrary || onHome },
+    { id:"my-library", label:"マイセット", icon:"📚", desc:"作成した単語帳", action:onMyLibrary || onHome },
     { id:"library", label:"公開ライブラリ", icon:"🌐", action:onLibrary },
   ];
   return (
@@ -363,7 +375,8 @@ function MobileDrawer({open,onClose,credits,onHome,onMyLibrary,onLibrary,onGener
           <div className="drawer-divider"/>
           <div className="drawer-credit">
             <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
-            <span>クレジット残機: <strong>{credits}</strong></span>
+            <span>AI生成 残り<strong>{credits}</strong>回</span>
+            <span style={{fontSize:'11px',color:'var(--text2)',display:'block',marginTop:'2px'}}>1日3回まで無料・翌日リセット</span>
           </div>
           <a className="drawer-feedback" href={FEEDBACK_FORM_URL} target="_blank" rel="noopener noreferrer" onClick={onClose}>
             💬 ご意見・不具合報告
@@ -419,7 +432,7 @@ function FeedbackFab() {
 function AppSidebar({active,onHome,onMyLibrary,onLibrary,credits}) {
   const items = [
     { id: "home", label: "ホーム", icon: "🏠", action: onHome },
-    { id: "my-library", label: "ライブラリ", icon: "📚", desc: "作成・保存した学習セット", action: onMyLibrary || onHome },
+    { id: "my-library", label: "マイセット", icon: "📚", desc: "作成した単語帳", action: onMyLibrary || onHome },
     { id: "library", label: "公開ライブラリ", icon: "🌐", action: onLibrary },
   ].filter((item)=>typeof item.action === "function");
 
@@ -452,7 +465,8 @@ function AppSidebar({active,onHome,onMyLibrary,onLibrary,credits}) {
 
       <div className="sidebar-credit-card">
         <svg className="credit-gem" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg>
-        <span>クレジット残機: <strong>{credits !== undefined ? credits : "—"}</strong></span>
+        <span>AI生成 残り<strong>{credits !== undefined ? credits : "—"}</strong>回</span>
+        <span style={{fontSize:'11px',color:'var(--text2)',display:'block',marginTop:'2px'}}>1日3回まで無料・翌日リセット</span>
       </div>
 
       <a className="sidebar-feedback" href={FEEDBACK_FORM_URL} target="_blank" rel="noopener noreferrer">
@@ -462,7 +476,7 @@ function AppSidebar({active,onHome,onMyLibrary,onLibrary,credits}) {
   );
 }
 
-function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck}) {
+function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash}) {
   const [filter,setFilter] = useState("all");
   const [quickTopic, setQuickTopic] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
@@ -616,6 +630,7 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
                     <span className="quick-result-meta"> · {quickResult.cards.length}語</span>
                   </div>
                   <button className="nbtn primary" onClick={() => onSaveGeneratedDeck(quickResult)}>この単語帳を保存</button>
+                  <button className="nbtn accent" onClick={() => onSaveAndStartFlash(quickResult)}>保存して学習を始める</button>
                 </div>
                 <div className="quick-cards-grid">
                   {quickResult.cards.map(card => (
@@ -1384,7 +1399,7 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
         left={<button className="nbtn ghost" onClick={onBack}>戻る</button>}
         center={<div className="study-deck-title">学習セット</div>}
         right={(
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
             <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav} title={deck.favorited?"保存済み":"保存"}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
             <button className="nbtn" onClick={onEdit}>単語帳編集</button>
             <button className="nbtn danger" onClick={onDelete}>削除</button>
@@ -1410,10 +1425,12 @@ function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdat
         </div>
 
         <div className="set-action-row">
-          <button className="nbtn primary" onClick={()=>onStartMode("flip")}>フラッシュカード開始</button>
-          <button className="nbtn ghost" onClick={()=>onStartMode("quiz-choice")}>4択クイズ</button>
-          <button className="nbtn ghost" onClick={()=>onStartMode("quiz-write")}>記述クイズ</button>
-          <button className="nbtn ghost" style={{ borderColor: "#8b5cf6", color: "#8b5cf6" }} onClick={()=>setTestSubMenu(true)}>テスト</button>
+          {modes.map(m=>(
+            <button key={m.id} className={m.id==="flip"?"nbtn primary":"nbtn ghost"} style={m.id==="test"?{borderColor:m.color,color:m.color}:undefined} onClick={()=>m.id==="test"?setTestSubMenu(true):onStartMode(m.id)}>
+              <span>{m.id==="flip"?m.label+"開始":m.label}</span>
+              <span className="action-desc">{m.desc}</span>
+            </button>
+          ))}
         </div>
       </section>
 
