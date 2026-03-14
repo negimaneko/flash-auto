@@ -710,7 +710,7 @@ function MobileDrawer({open,onClose,credits,onHome,onLibrary,onGenerate,onNew,ac
 }
 
 // FEEDBACK FAB
-const FEEDBACK_FORM_URL = "https://forms.gle/PLACEHOLDER";
+const FEEDBACK_FORM_URL = "https://forms.gle/6fggs7Ce7SoXBs9E8";
 
 function FeedbackFab() {
   const [open, setOpen] = useState(false);
@@ -804,7 +804,7 @@ function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggl
   const [quickResult, setQuickResult] = useState(null);
   const [quickError, setQuickError] = useState("");
   const appOpenRef = useRef(Date.now());
-  const QUICK_SAMPLES = ["量子力学", "TOEFL", "経済学", "機械学習", "心理学"];
+  const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎"];
 
   const handleQuickGenerate = async () => {
     if (!quickTopic.trim() || quickLoading) return;
