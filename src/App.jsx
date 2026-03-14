@@ -732,7 +732,7 @@ function FeedbackFab() {
               <strong>所要時間：約1分</strong>
             </p>
             <a
-              className="nbtn accent feedback-modal-btn"
+              className="nbtn primary feedback-modal-btn"
               href={FEEDBACK_FORM_URL}
               target="_blank"
               rel="noopener noreferrer"
@@ -2592,7 +2592,7 @@ function Styles() {
     ".credit-badge{display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:999px;background:linear-gradient(135deg,#ecfdf5,#ccfbf1);border:1.5px solid rgba(13,148,136,.2);font-weight:700;font-size:14px;color:var(--accent);font-family:var(--ff);}",
     ".credit-gem{color:var(--accent);flex-shrink:0;}",
     ".btn-plus{font-size:1.4em;font-weight:900;line-height:1;vertical-align:middle;}",
-    ".nbtn{font-family:var(--ff);font-weight:600;font-size:14px;padding:9px 18px;border-radius:var(--r-sm);cursor:pointer;transition:all .2s;border:1.5px solid transparent;white-space:nowrap;}",
+    ".nbtn{font-family:var(--ff);font-weight:600;font-size:14px;padding:9px 18px;border-radius:var(--r-sm);cursor:pointer;transition:all .2s;border:1.5px solid transparent;white-space:nowrap;display:inline-block;text-decoration:none;box-sizing:border-box;}",
     ".nbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}",
     ".nbtn.primary:hover{background:var(--accent2);}",
     ".nbtn.primary:disabled{opacity:.45;cursor:default;}",
