@@ -313,7 +313,7 @@ export default function App() {
                                onMenuClick={()=>setMenuOpen(true)}
                                onSaveGeneratedDeck={saveGeneratedDeck}/>}
       {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)} credits={appCredits}/>}
-      {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast}/>}
+      {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast} onCreditsUpdate={setAppCredits}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
       {view==="detail"    && activeDeck && <DetailView deck={syncActive(activeDeck.id)} onBack={goHome}
                                onStartMode={startMode}
@@ -750,7 +750,7 @@ function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
 }
 
 // AI GENERATE VIEW
-function GenerateView({onSave,onBack,showToast}) {
+function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
   const [topic, setTopic] = useState("");
   const [mustIncludeWords, setMustIncludeWords] = useState("");
   const [wordLang, setWordLang] = useState("technical");
@@ -839,7 +839,9 @@ function GenerateView({onSave,onBack,showToast}) {
     });
     setGeneratedCacheId(cacheId || null);
     if (typeof creditsLeft === "number") {
-      setRemainingCredits(Math.max(0, creditsLeft));
+      const next = Math.max(0, creditsLeft);
+      setRemainingCredits(next);
+      onCreditsUpdate?.(next);
     }
   };
 
@@ -887,6 +889,10 @@ function GenerateView({onSave,onBack,showToast}) {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
+      if (typeof e.remainingCredits === "number") {
+        setRemainingCredits(e.remainingCredits);
+        onCreditsUpdate?.(e.remainingCredits);
+      }
       trackEvent("generate_theme_deck", {
         theme: topic.trim(),
         generation_latency_ms: Date.now() - t0,
@@ -950,6 +956,10 @@ function GenerateView({onSave,onBack,showToast}) {
       showToast(`${result.addedCount || 0}枚のカードを追加しました`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
+      if (typeof e.remainingCredits === "number") {
+        setRemainingCredits(e.remainingCredits);
+        onCreditsUpdate?.(e.remainingCredits);
+      }
       trackEvent("generate_theme_deck", {
         theme: topic.trim() || generated?.name,
         generation_latency_ms: Date.now() - t0,
