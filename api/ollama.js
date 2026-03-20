@@ -20,10 +20,12 @@ async function resolveOllamaModel(baseUrl) {
 
 export async function handleOllamaRequest(req, res) {
   const { handlePreflight, setCors } = await import("./_shared/cors.js");
+  const { checkRateLimit } = await import("./_shared/rate-limit.js");
   if (handlePreflight(req, res)) return;
   setCors(req, res);
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (checkRateLimit(req, res, { maxRequests: 20, windowMs: 60_000, prefix: "ollama" })) return;
 
   const { prompt, maxTokens } = req.body || {};
   if (!prompt) return res.status(400).json({ error: "prompt is required" });

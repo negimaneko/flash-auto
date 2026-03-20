@@ -2,6 +2,7 @@ import { requestGroqChat } from "./_shared/groq.js";
 import { requestGeminiChat } from "./_shared/gemini.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
+import { checkRateLimit, getClientIp } from "./_shared/rate-limit.js";
 
 /**
  * デッキ生成用LLMを選択する。
@@ -527,25 +528,51 @@ async function readCredits(supabase, userId, usageDate) {
   return data?.[0]?.count || 0;
 }
 
-async function consumeCredit(supabase, userId, usageDate) {
-  const usedCredits = await readCredits(supabase, userId, usageDate);
-  if (usedCredits >= DAILY_CREDIT_LIMIT) {
+async function consumeCredit(supabase, userId, usageDate, clientIp) {
+  const usedByUser = await readCredits(supabase, userId, usageDate);
+  if (usedByUser >= DAILY_CREDIT_LIMIT) {
     throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
   }
 
-  const nextCredits = usedCredits + 1;
+  // IPベースのクレジットチェック（userId偽装によるバイパス防止）
+  const ipKey = `ip:${clientIp}`;
+  if (clientIp && clientIp !== "unknown") {
+    const usedByIp = await readCredits(supabase, ipKey, usageDate);
+    if (usedByIp >= DAILY_CREDIT_LIMIT) {
+      throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
+    }
+  }
+
+  const nextUserCredits = usedByUser + 1;
+  // userId のカウントを更新
   const { error } = await supabase
     .from("daily_generate_usage")
     .upsert({
       user_id: userId,
       usage_date: usageDate,
-      count: nextCredits,
+      count: nextUserCredits,
     }, {
       onConflict: "user_id,usage_date",
     });
 
   if (error) throw new Error(error.message);
-  return Math.max(0, DAILY_CREDIT_LIMIT - nextCredits);
+
+  // IPのカウントも更新
+  if (clientIp && clientIp !== "unknown") {
+    const ipUsed = await readCredits(supabase, ipKey, usageDate);
+    const { error: ipError } = await supabase
+      .from("daily_generate_usage")
+      .upsert({
+        user_id: ipKey,
+        usage_date: usageDate,
+        count: ipUsed + 1,
+      }, {
+        onConflict: "user_id,usage_date",
+      });
+    if (ipError) console.warn("[deck-cache] IP credit tracking failed:", ipError.message);
+  }
+
+  return Math.max(0, DAILY_CREDIT_LIMIT - nextUserCredits);
 }
 
 async function fetchCachedDeck(supabase, topicKey, defLang) {
@@ -630,6 +657,7 @@ export default async function handler(req, res) {
   setCors(req, res);
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (checkRateLimit(req, res, { maxRequests: 5, windowMs: 60_000, prefix: "deck" })) return;
 
   const action = String(req.body?.action || "initial").trim();
   const topic = String(req.body?.topic || "").trim();
@@ -644,6 +672,8 @@ export default async function handler(req, res) {
   if (topic.length > 200) return res.status(400).json({ error: "テーマは200文字以内で入力してください" });
   if (mustIncludeWords.length > 200) return res.status(400).json({ error: "「必ず含める単語」は200文字以内で入力してください" });
   if (!userId) return res.status(400).json({ error: "userId is required" });
+
+  const clientIp = getClientIp(req);
 
   try {
     const supabase = getSupabaseAdmin();
@@ -695,7 +725,10 @@ export default async function handler(req, res) {
 
     // --- Supabase設定済み: キャッシュ・クレジットあり ---
     if (action === "initial") {
-      const remainingCredits = Math.max(0, DAILY_CREDIT_LIMIT - await readCredits(supabase, userId, usageDate));
+      const usedByUser = await readCredits(supabase, userId, usageDate);
+      const ipKey = `ip:${clientIp}`;
+      const usedByIp = (clientIp && clientIp !== "unknown") ? await readCredits(supabase, ipKey, usageDate) : 0;
+      const remainingCredits = Math.max(0, DAILY_CREDIT_LIMIT - Math.max(usedByUser, usedByIp));
 
       // mustIncludeWords が指定されている場合はキャッシュを使わず新規生成
       if (!mustIncludeWords) {
@@ -709,7 +742,7 @@ export default async function handler(req, res) {
         }
       }
 
-      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate);
+      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate, clientIp);
       const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
 
       const { data, error } = await supabase
@@ -757,7 +790,7 @@ export default async function handler(req, res) {
         ...existingWords,
       ].filter(Boolean);
 
-      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate);
+      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate, clientIp);
       const continuationCards = await generateContinuationCards({
         topic: cached.topic || topic,
         wordLang: cached.word_lang || wordLang,
