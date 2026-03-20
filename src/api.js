@@ -13,11 +13,19 @@ export async function callAI(prompt, maxTokens = 1024) {
 
   for (const ep of endpoints) {
     try {
-      const r = await fetch(ep.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, maxTokens }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      let r;
+      try {
+        r = await fetch(ep.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, maxTokens }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const isJson = (r.headers.get("content-type") || "").includes("application/json");
       const d = isJson ? await r.json() : { error: await r.text() };
 
@@ -44,7 +52,9 @@ export async function callAI(prompt, maxTokens = 1024) {
       }
       return { text: d.text, provider: ep.provider, fallbackUsed: attemptCount > 0 };
     } catch (e) {
-      const message = e instanceof Error ? e.message : "AI request failed";
+      const message = e && e.name === "AbortError"
+        ? "タイムアウト（10秒）"
+        : (e instanceof Error ? e.message : "AI request failed");
       errors.push({ provider: ep.provider, message });
       attemptCount++;
       if (ep === endpoints[endpoints.length - 1]) {
@@ -59,11 +69,24 @@ export async function callAI(prompt, maxTokens = 1024) {
 }
 
 export async function fetchDeckFromCacheOrGenerate(payload) {
-  const response = await fetch("/api/deck-cache", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  let response;
+  try {
+    response = await fetch("/api/deck-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e && e.name === "AbortError") {
+      throw new Error("単語帳の生成がタイムアウトしました（30秒）。もう一度お試しください。");
+    }
+    throw e;
+  }
+  clearTimeout(timeoutId);
   const isJson = (response.headers.get("content-type") || "").includes("application/json");
   const result = isJson ? await response.json() : { error: await response.text() };
 

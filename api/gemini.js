@@ -1,11 +1,13 @@
 import { requestGeminiChat } from "./_shared/gemini.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
+import { checkRateLimit } from "./_shared/rate-limit.js";
 
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
   setCors(req, res);
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (checkRateLimit(req, res, { maxRequests: 20, windowMs: 60_000, prefix: "gemini" })) return;
 
   // GEMINI_API_KEY が未設定なら 404 を返す
   // → callAI のフォールバックチェーンで自動的にスキップされる
