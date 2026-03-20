@@ -134,7 +134,9 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
         showToast?.(mastery.message, "info");
       }
     } catch {
-      // Ignore AI mastery failures and keep the local result screen.
+      const correctCount = finalResults.filter((r) => r.correct).length;
+      const total = finalResults.length;
+      showToast?.(`結果: ${correctCount}/${total} 正解（AI判定は利用できませんでした）`, "info");
     }
     setDone(true);
     submittingRef.current = false;

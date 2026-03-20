@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import "./App.css";
 import { getAnonymousUserId, trackEvent, isNewUser } from "./lib/tracking.js";
 import { AI_GENERATE_DAILY_LIMIT, SPLASH_DURATION_MS } from "./constants.js";
@@ -72,23 +72,22 @@ export default function App() {
   }, [decks]);
 
   const showToast = useCallback((msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),2800);},[]);
-  const goHome = () => { setView("home"); setActiveDeck(null); setEditDeck(null); };
-  const syncActive = (id) => normalizeDeck(decks.find(d=>d.id===id) || activeDeck);
-  const openDetail = (deck) => { setActiveDeck(normalizeDeck(deck)); setView("detail"); };
-  const startMode = (mode) => {
+  const goHome = useCallback(() => { setView("home"); setActiveDeck(null); setEditDeck(null); }, []);
+  const openDetail = useCallback((deck) => { setActiveDeck(normalizeDeck(deck)); setView("detail"); }, []);
+  const startMode = useCallback((mode) => {
     if (mode==="flip") setView("flip");
     else if (mode==="quiz-choice") { setQuizMode("choice"); setView("quiz"); }
     else if (mode==="quiz-write")  { setQuizMode("write");  setView("quiz"); }
-  };
-  const saveDeck = (deck) => {
+  }, []);
+  const saveDeck = useCallback((deck) => {
     const normalizedDeck = normalizeDeck(deck);
     setDecks(prev => {
       const ex = prev.find(d=>d.id===normalizedDeck.id);
       return ex ? prev.map(d=>d.id===normalizedDeck.id ? normalizedDeck : d) : [...prev, normalizedDeck];
     });
     showToast("保存しました"); goHome();
-  };
-  const saveGeneratedDeck = (deck) => {
+  }, [showToast, goHome]);
+  const saveGeneratedDeck = useCallback((deck) => {
     const normalizedDeck = normalizeDeck(deck);
     setDecks(prev=>[...prev, normalizedDeck]);
     setActiveDeck(normalizedDeck);
@@ -98,8 +97,8 @@ export default function App() {
       deck_id: normalizedDeck.id,
       card_count: normalizedDeck.cards.length,
     });
-  };
-  const saveAndStartFlash = (deck) => {
+  }, [showToast]);
+  const saveAndStartFlash = useCallback((deck) => {
     const normalizedDeck = normalizeDeck(deck);
     setDecks(prev=>[...prev, normalizedDeck]);
     setActiveDeck(normalizedDeck);
@@ -109,28 +108,28 @@ export default function App() {
       deck_id: normalizedDeck.id,
       card_count: normalizedDeck.cards.length,
     });
-  };
-  const toggleFavorite = (id) => {
+  }, [showToast]);
+  const toggleFavorite = useCallback((id) => {
     setDecks(prev=>prev.map(d=>d.id===id
       ? {...d, favorited:!d.favorited, favCount:(d.favCount||0)+(d.favorited?-1:1)} : d));
-  };
-  const markCleared = (id) => setDecks(prev=>prev.map(d=>d.id===id?{...d,cleared:true}:d));
-  const updateCard = (deckId, cardId, nw, nd) => {
+  }, []);
+  const markCleared = useCallback((id) => setDecks(prev=>prev.map(d=>d.id===id?{...d,cleared:true}:d)), []);
+  const updateCard = useCallback((deckId, cardId, nw, nd) => {
     const patch = d => d.id===deckId ? normalizeDeck({...d,cards:d.cards.map(c=>c.id===cardId?{...c,word:nw,definition:nd}:c)}) : d;
     setDecks(prev=>prev.map(patch));
     setActiveDeck(prev=>prev&&prev.id===deckId ? patch(prev) : prev);
-  };
-  const addCard = (deckId, card) => {
+  }, []);
+  const addCard = useCallback((deckId, card) => {
     const patch = d => d.id===deckId ? normalizeDeck({...d,cards:[...d.cards,card]}) : d;
     setDecks(prev=>prev.map(patch));
     setActiveDeck(prev=>prev&&prev.id===deckId ? patch(prev) : prev);
-  };
-  const deleteCard = (deckId, cardId) => {
+  }, []);
+  const deleteCard = useCallback((deckId, cardId) => {
     const patch = d => d.id===deckId ? normalizeDeck({...d,cards:d.cards.filter(c=>c.id!==cardId)}) : d;
     setDecks(prev=>prev.map(patch));
     setActiveDeck(prev=>prev&&prev.id===deckId ? patch(prev) : prev);
-  };
-  const updateStreaks = (deckId, results) => {
+  }, []);
+  const updateStreaks = useCallback((deckId, results) => {
     const patch = d => {
       if (d.id !== deckId) return d;
       const newCards = d.cards.map(c => {
@@ -143,7 +142,10 @@ export default function App() {
     };
     setDecks(prev => prev.map(patch));
     setActiveDeck(prev => prev && prev.id === deckId ? patch(prev) : prev);
-  };
+  }, []);
+  const syncActive = useMemo(() => {
+    return (id) => normalizeDeck(decks.find(d=>d.id===id) || activeDeck);
+  }, [decks, activeDeck]);
 
   if (showSplash) {
     return (
