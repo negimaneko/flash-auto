@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MNEMOX デイリーレポート送信スクリプト"""
+"""flash auto デイリーレポート送信スクリプト"""
 
 import json
 import subprocess
@@ -102,7 +102,7 @@ def make_chart(labels, data, title, chart_type="bar"):
 try:
     users = fetch(f"{BASE}/users?select=id,is_internal,created_at")
 except Exception as e:
-    send_telegram(f"❌ MNEMOX デイリーレポート失敗\nSupabase接続エラー: {e}")
+    send_telegram(f"❌ flash auto デイリーレポート失敗\nSupabase接続エラー: {e}")
     sys.exit(1)
 
 internal_ids = {u["id"] for u in users if u.get("is_internal")}
@@ -115,7 +115,7 @@ new_today = len([
 try:
     events = fetch(f"{BASE}/events?select=event_name,occurred_at,user_id,metadata&order=occurred_at.desc&limit=5000")
 except Exception as e:
-    send_telegram(f"❌ MNEMOX デイリーレポート失敗\nイベント取得エラー: {e}")
+    send_telegram(f"❌ flash auto デイリーレポート失敗\nイベント取得エラー: {e}")
     sys.exit(1)
 
 today_events = [
@@ -194,7 +194,7 @@ try:
     chart1_url = make_chart(
         ["app_open", "generate_word", "generate_theme_deck", "save_deck", "review_card"],
         [app_open, gen_word, gen_deck, save_deck, review_card],
-        "MNEMOX 本日のイベント"
+        "flash auto 本日のイベント"
     )
 except Exception:
     pass
@@ -232,7 +232,7 @@ if chart1_url:
 if chart2_url:
     send_photo(chart2_url, "📈 直近7日のapp_open")
 
-report = f"""📊 MNEMOX デイリーレポート（{date_str}）
+report = f"""📊 flash auto デイリーレポート（{date_str}）
 
 ■ 今日の数値（内部ユーザー除外）
 ・新規ユーザー: {new_today}人

@@ -1,12 +1,12 @@
-# MNEMOX
+# flash auto
 
-MNEMOX は、AI 生成と回答判定を行う単語帳アプリです。ローカルの Ollama 上の `qwen` 系モデルを優先し、利用できない場合は Groq にフォールバックします。
+flash auto は、AI 生成と回答判定を行う単語帳アプリです。ローカルの Ollama 上の `qwen` 系モデルを優先し、利用できない場合は Groq にフォールバックします。
 
 ## ローカルで qwen を使う手順
 
 ### 1. Ollama を起動する
 
-`qwen3 1.7b` をダウンロード済みでも、API サーバが起動していないと MNEMOX から使えません。
+`qwen3 1.7b` をダウンロード済みでも、API サーバが起動していないと flash auto から使えません。
 
 ```bash
 ollama serve
@@ -36,7 +36,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 AI_GENERATE_DAILY_LIMIT=3
 ```
 
-そのうえで [supabase/schema.sql](/Users/KikuchiKanon/Documents/mnemox/supabase/schema.sql) を Supabase SQL Editor で実行してください。
+そのうえで [supabase/schema.sql](/Users/KikuchiKanon/Documents/claude flash auto/supabase/schema.sql) を Supabase SQL Editor で実行してください。
 
 ### 3. 起動する
 

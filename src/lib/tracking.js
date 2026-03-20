@@ -73,7 +73,7 @@ export function isInternalUser() {
 
 /**
  * 内部ユーザーフラグを設定する（開発者がコンソールから呼ぶ用）。
- * window.mnemoxMarkInternal() でも呼べるようにする。
+ * window.flashAutoMarkInternal() でも呼べるようにする。
  */
 export function markAsInternal() {
   if (typeof window === "undefined") return;
