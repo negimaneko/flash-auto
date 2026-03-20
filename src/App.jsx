@@ -216,7 +216,9 @@ export default function App() {
     try {
       localStorage.setItem("flash_auto_decks", JSON.stringify(decks));
     } catch (e) {
-      // 容量オーバーなどで保存できなくても、アプリは止めない
+      console.error("localStorage保存エラー:", e);
+      setToast({ msg: "保存容量がいっぱいです。不要な単語帳を削除してください。", type: "err" });
+      setTimeout(() => setToast(null), 4000);
     }
   }, [decks]);
 
