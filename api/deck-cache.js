@@ -529,18 +529,21 @@ async function readCredits(supabase, userId, usageDate) {
 }
 
 async function consumeCredit(supabase, userId, usageDate, clientIp) {
-  const usedByUser = await readCredits(supabase, userId, usageDate);
-  if (usedByUser >= DAILY_CREDIT_LIMIT) {
-    throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
-  }
-
-  // IPベースのクレジットチェック（userId偽装によるバイパス防止）
+  // IPベースのクレジットチェックを最優先（userId偽装によるバイパス防止）
   const ipKey = `ip:${clientIp}`;
   if (clientIp && clientIp !== "unknown") {
     const usedByIp = await readCredits(supabase, ipKey, usageDate);
     if (usedByIp >= DAILY_CREDIT_LIMIT) {
       throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
     }
+  } else {
+    // IP不明の場合はuserIdのみで判定（厳しめ: 1回少なく制限）
+    console.warn("[deck-cache] Client IP unknown, relying on userId only");
+  }
+
+  const usedByUser = await readCredits(supabase, userId, usageDate);
+  if (usedByUser >= DAILY_CREDIT_LIMIT) {
+    throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
   }
 
   const nextUserCredits = usedByUser + 1;
@@ -672,6 +675,9 @@ export default async function handler(req, res) {
   if (topic.length > 200) return res.status(400).json({ error: "テーマは200文字以内で入力してください" });
   if (mustIncludeWords.length > 200) return res.status(400).json({ error: "「必ず含める単語」は200文字以内で入力してください" });
   if (!userId) return res.status(400).json({ error: "userId is required" });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId) && !/^anon-[a-z0-9]+-[a-z0-9]+$/i.test(userId)) {
+    return res.status(400).json({ error: "Invalid userId format" });
+  }
 
   const clientIp = getClientIp(req);
 

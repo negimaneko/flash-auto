@@ -257,6 +257,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="例：量子力学の入門（※1回につき10〜15枚のカードが生成されます）"
+              maxLength={LIMITS.TOPIC}
               style={topic.length > LIMITS.TOPIC ? { borderColor: "var(--red)" } : {}}
             />
             <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -274,6 +275,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
               value={mustIncludeWords}
               onChange={(e) => setMustIncludeWords(e.target.value)}
               placeholder="例：entropy, quantum, photon（カンマ区切りで入力）"
+              maxLength={LIMITS.MUST}
               style={mustIncludeWords.length > LIMITS.MUST ? { borderColor: "var(--red)" } : {}}
             />
             <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -371,6 +373,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                     value={card.word}
                     onChange={(e) => updateCard(card.id, "word", e.target.value)}
                     placeholder="単語"
+                    maxLength={LIMITS.WORD}
                     style={card.word.length > LIMITS.WORD ? { borderColor:"var(--red)" } : {}}
                   />
                   <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -382,6 +385,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                     onChange={(e) => updateCard(card.id, "definition", e.target.value)}
                     placeholder="定義"
                     rows={4}
+                    maxLength={LIMITS.DEF}
                     style={{ resize: "vertical", ...(card.definition.length > LIMITS.DEF ? { borderColor:"var(--red)" } : {}) }}
                   />
                   <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -400,6 +404,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                 value={newWord}
                 onChange={(e) => setNewWord(e.target.value)}
                 placeholder="単語"
+                maxLength={LIMITS.WORD}
               />
               <textarea
                 className="settings-select"
@@ -407,6 +412,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                 onChange={(e) => setNewDef(e.target.value)}
                 placeholder="定義"
                 rows={3}
+                maxLength={LIMITS.DEF}
                 style={{ resize: "vertical" }}
               />
               <div>

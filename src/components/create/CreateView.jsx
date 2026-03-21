@@ -133,7 +133,7 @@ export function CreateView({initial,onSave,onBack,showToast}) {
 
       <div style={{ maxWidth:800, margin:"0 auto", padding:"24px 0 100px" }}>
         <div style={{ position:"relative" }}>
-          <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} style={nameOver ? { borderColor:"var(--red)" } : {}} />
+          <input className="create-name-input" placeholder="タイトルをつけてください" value={name} onChange={(e)=>setName(e.target.value)} maxLength={LIMITS.NAME} style={nameOver ? { borderColor:"var(--red)" } : {}} />
           <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
             <CharCount value={name} max={LIMITS.NAME} />
           </div>
@@ -185,7 +185,7 @@ export function CreateView({initial,onSave,onBack,showToast}) {
         <div className="settings-card" style={{ marginTop:18 }}>
           <div className="section-title">タグ</div>
           <div style={{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" }}>
-            <input className="settings-select" value={tagInput} onChange={(e)=>setTagInput(e.target.value)} placeholder="＃タグを追加" />
+            <input className="settings-select" value={tagInput} onChange={(e)=>setTagInput(e.target.value)} placeholder="＃タグを追加" maxLength={30} />
             <button className="nbtn" onClick={addTag}>タグ追加</button>
           </div>
           {tags.length > 0 && (
@@ -208,14 +208,14 @@ export function CreateView({initial,onSave,onBack,showToast}) {
                 </div>
                 <div className="create-card-fields">
                   <div style={{ flex:1, paddingRight:16, borderRight:"2px solid var(--border)", display:"flex", flexDirection:"column" }}>
-                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.word.length>LIMITS.WORD?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0 }} />
+                    <input className="settings-select" value={card.word} onChange={(e)=>updateCard(card.id,"word",e.target.value)} onBlur={()=>handleWordBlur(card.id)} placeholder="単語を入力" maxLength={LIMITS.WORD} style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.word.length>LIMITS.WORD?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0 }} />
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6 }}>
                       <div style={{ fontSize:12, color:"var(--muted)" }}>用語</div>
                       <CharCount value={card.word} max={LIMITS.WORD} />
                     </div>
                   </div>
                   <div style={{ flex:1, paddingLeft:16, display:"flex", flexDirection:"column" }}>
-                    <AutoTextarea className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} rows={1} style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.definition.length>LIMITS.DEF?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0, resize:"none", overflow:"hidden", fontFamily:"inherit", fontSize:"inherit", lineHeight:"1.5" }} />
+                    <AutoTextarea className="settings-select" value={card.definition} onChange={(e)=>updateCard(card.id,"definition",e.target.value)} placeholder={generatingCardId===card.id ? "生成中..." : "定義を入力"} disabled={generatingCardId===card.id} rows={1} maxLength={LIMITS.DEF} style={{ width:"100%", border:"none", borderBottom:`2px solid ${card.definition.length>LIMITS.DEF?"var(--red)":"var(--accent)"}`, borderRadius:0, background:"transparent", paddingLeft:0, resize:"none", overflow:"hidden", fontFamily:"inherit", fontSize:"inherit", lineHeight:"1.5" }} />
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6 }}>
                       <div style={{ fontSize:12, color:"var(--muted)" }}>{generatingCardId===card.id ? "AI生成中..." : "定義"}</div>
                       <CharCount value={card.definition} max={LIMITS.DEF} />

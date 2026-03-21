@@ -40,6 +40,7 @@ export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick,c
                 placeholder="単語帳名やタグで検索"
                 value={query}
                 onChange={(e)=>setQuery(e.target.value)}
+                maxLength={100}
               />
             </div>
 

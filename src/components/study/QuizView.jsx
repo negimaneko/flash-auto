@@ -205,7 +205,9 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
       message = "正解";
     } else {
       try {
-        const judged = await aiEval(current.word, current.definition, guess, deck.defLang);
+        const { question, answer: correctAns } = getQA(current);
+        const evalLang = answerDir === "word" ? deck.wordLang : deck.defLang;
+        const judged = await aiEval(question, correctAns, guess, evalLang);
         ok = Boolean(judged?.correct);
         message = judged?.feedback || (ok ? "正解" : "答え: " + answer);
       } catch {

@@ -139,6 +139,7 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
                   }}
                   placeholder="例：量子力学、TOEFL、経済学..."
                   disabled={quickLoading}
+                  maxLength={LIMITS.TOPIC}
                   style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
                 />
                 <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
@@ -218,6 +219,7 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="セット名・タグ・単語で検索..."
+                maxLength={100}
               />
               {searchQuery && (
                 <button className="set-search-clear" onClick={() => setSearchQuery("")} aria-label="クリア">✕</button>
