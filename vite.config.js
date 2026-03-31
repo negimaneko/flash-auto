@@ -248,6 +248,24 @@ async function handleTrackProxy(req, res, supabaseUrl, supabaseKey) {
   sendJson(res, 200, { ok: true })
 }
 
+const _localCreditUsage = new Map()
+const LOCAL_DAILY_CREDIT_LIMIT = 10
+
+function _getLocalCredits(userId) {
+  const today = new Date().toISOString().slice(0, 10)
+  const key = `${userId}:${today}`
+  return { key, used: _localCreditUsage.get(key) || 0, limit: LOCAL_DAILY_CREDIT_LIMIT }
+}
+
+function _consumeLocalCredit(userId) {
+  const { key, used, limit } = _getLocalCredits(userId)
+  if (used >= limit) {
+    return { exhausted: true, credits: { used, limit } }
+  }
+  _localCreditUsage.set(key, used + 1)
+  return { exhausted: false, credits: { used: used + 1, limit } }
+}
+
 async function handleDeckCacheProxy(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -261,6 +279,7 @@ async function handleDeckCacheProxy(req, res) {
 
   const action = String(body.action || 'initial').trim()
   const topic = String(body.topic || '').trim()
+  const userId = String(body.userId || 'anon-local')
   const wordLang = normalizeLanguageValue(body.wordLang, 'technical')
   const defLang = normalizeLanguageValue(body.defLang)
   const detailLevel = Number(body.detailLevel || 2)
@@ -273,10 +292,16 @@ async function handleDeckCacheProxy(req, res) {
     const { generateInitialDeck, generateContinuationCards } = await import('./api/deck-cache.js')
 
     if (action === 'initial') {
+      const { exhausted, credits } = _consumeLocalCredit(userId)
+      if (exhausted) {
+        sendJson(res, 429, { error: `今日の生成回数（${LOCAL_DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`, credits })
+        return
+      }
       const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords })
       sendJson(res, 200, {
         source: 'generated',
         cacheId: null,
+        credits,
         deck: {
           deckName: generated.deckName,
           tags: generated.tags,
@@ -290,6 +315,11 @@ async function handleDeckCacheProxy(req, res) {
     }
 
     if (action === 'continue') {
+      const { exhausted, credits } = _consumeLocalCredit(userId)
+      if (exhausted) {
+        sendJson(res, 429, { error: `今日の生成回数（${LOCAL_DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`, credits })
+        return
+      }
       const existingWords = Array.isArray(body.existingWords)
         ? body.existingWords.map((w) => String(w || '').trim()).filter(Boolean)
         : []
@@ -302,6 +332,7 @@ async function handleDeckCacheProxy(req, res) {
         source: 'continued',
         addedCount: continuationCards.length,
         cacheId: null,
+        credits,
         deck: { cards: continuationCards },
       })
       return

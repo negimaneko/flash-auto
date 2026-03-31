@@ -21,6 +21,7 @@ export function GenerateView({onSave,onBack,showToast}) {
   const [error, setError] = useState("");
   const [newWord, setNewWord] = useState("");
   const [newDef, setNewDef] = useState("");
+  const [credits, setCredits] = useState(null);
 
   const selectedDetail = DETAIL_LEVELS.find((item) => item.id === detailLevel) || DETAIL_LEVELS[1];
 
@@ -124,6 +125,7 @@ export function GenerateView({onSave,onBack,showToast}) {
         ...(mustIncludeWords.trim() ? { mustIncludeWords: mustIncludeWords.trim() } : {}),
       });
       applyGeneratedDeckResult(result.deck, result.cacheId, normalizedDefLang, result.source);
+      if (result.credits) setCredits(result.credits);
       trackEvent("generate_theme_deck", {
         theme: topic.trim(),
         deck_id: result.cacheId || null,
@@ -139,6 +141,7 @@ export function GenerateView({onSave,onBack,showToast}) {
         showToast("新しい単語帳を生成しました");
       }
     } catch (e) {
+      if (e.credits) setCredits(e.credits);
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
       trackEvent("generate_theme_deck", {
         theme: topic.trim(),
@@ -192,6 +195,7 @@ export function GenerateView({onSave,onBack,showToast}) {
           : [...generated.cards.map(c => ({ word: c.word, definition: c.definition })), ...(result.deck?.cards || [])],
       };
       applyGeneratedDeckResult(mergedDeck, result.cacheId || generatedCacheId, generated.defLang);
+      if (result.credits) setCredits(result.credits);
       trackEvent("generate_theme_deck", {
         theme: topic.trim() || generated.name,
         deck_id: result.cacheId || generatedCacheId || null,
@@ -202,6 +206,7 @@ export function GenerateView({onSave,onBack,showToast}) {
       });
       showToast(`${result.addedCount || 0}枚のカードを追加しました`);
     } catch (e) {
+      if (e.credits) setCredits(e.credits);
       const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
       trackEvent("generate_theme_deck", {
         theme: topic.trim() || generated?.name,
@@ -302,6 +307,11 @@ export function GenerateView({onSave,onBack,showToast}) {
               {loading ? "生成中..." : "単語帳を生成"}
             </button>
             <button className="nbtn" onClick={onBack}>キャンセル</button>
+            {credits && (
+              <span style={{ color: credits.limit - credits.used <= 2 ? "var(--red)" : "var(--text3)", fontSize: 13 }}>
+                今日の残り：{credits.limit - credits.used} / {credits.limit}回
+              </span>
+            )}
           </div>
 
           {error && (

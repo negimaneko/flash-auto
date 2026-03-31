@@ -633,8 +633,17 @@ async function readCredits(supabase, userId, usageDate) {
   return data?.[0]?.count || 0;
 }
 
-async function recordUsage(supabase, userId, usageDate, clientIp) {
+const DAILY_CREDIT_LIMIT = 10;
+
+async function consumeCredit(supabase, userId, usageDate, clientIp) {
   const usedByUser = await readCredits(supabase, userId, usageDate);
+
+  if (usedByUser >= DAILY_CREDIT_LIMIT) {
+    const err = new Error(`今日の生成回数（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
+    err.code = "CREDIT_EXHAUSTED";
+    throw err;
+  }
+
   const nextUserCredits = usedByUser + 1;
   const { error } = await supabase
     .from("daily_generate_usage")
@@ -663,6 +672,8 @@ async function recordUsage(supabase, userId, usageDate, clientIp) {
       });
     if (ipError) console.warn("[deck-cache] IP usage tracking failed:", ipError.message);
   }
+
+  return { used: nextUserCredits, limit: DAILY_CREDIT_LIMIT };
 }
 
 async function fetchCachedDeck(supabase, topicKey, defLang) {
@@ -909,7 +920,7 @@ export default async function handler(req, res) {
         }
       }
 
-      await recordUsage(supabase, userId, usageDate, clientIp);
+      const credits = await consumeCredit(supabase, userId, usageDate, clientIp);
       const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
 
       const { data, error } = await supabase
@@ -934,6 +945,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         source: "generated",
+        credits,
         ...mapDeckRow(data[0], detailLevel),
       });
     }
@@ -956,7 +968,7 @@ export default async function handler(req, res) {
         ...existingWords,
       ].filter(Boolean);
 
-      await recordUsage(supabase, userId, usageDate, clientIp);
+      const credits = await consumeCredit(supabase, userId, usageDate, clientIp);
       const continuationCards = await generateContinuationCards({
         topic: cached.topic || topic,
         wordLang: cached.word_lang || wordLang,
@@ -986,12 +998,16 @@ export default async function handler(req, res) {
       return res.status(200).json({
         source: "continued",
         addedCount: continuationCards.length,
+        credits,
         ...mapDeckRow(data[0], detailLevel),
       });
     }
 
     return res.status(400).json({ error: "Unsupported action" });
   } catch (error) {
+    if (error.code === "CREDIT_EXHAUSTED") {
+      return res.status(429).json({ error: error.message, credits: { used: DAILY_CREDIT_LIMIT, limit: DAILY_CREDIT_LIMIT } });
+    }
     const message = error instanceof Error ? error.message : "Failed to load deck cache";
     console.error(`[/api/deck-cache] 500 error:`, message);
     return res.status(500).json({ error: message });
