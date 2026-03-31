@@ -115,7 +115,7 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
  * 例: 「ハズビンホテルのキャラクター」「SPY×FAMILYの登場人物」
  */
 function isCharacterTopic(topic) {
-  return /の(?:キャラクター|登場人物|キャスト|人物|メンバー)/.test(topic);
+  return /の(?:キャラクター|キャラ|登場人物|キャスト|人物|メンバー)/.test(topic);
 }
 
 /**
@@ -123,7 +123,7 @@ function isCharacterTopic(topic) {
  * 例: 「ハズビンホテルのキャラクター」→「ハズビンホテル」
  */
 function extractWorkTitle(topic) {
-  const match = topic.match(/^(.+?)の(?:キャラクター|登場人物|キャスト|人物|メンバー)/);
+  const match = topic.match(/^(.+?)の(?:キャラクター|キャラ|登場人物|キャスト|人物|メンバー)/);
   return match ? match[1].trim() : null;
 }
 
