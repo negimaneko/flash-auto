@@ -259,13 +259,14 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
                 {isEditing ? (
                   <div className="term-edit-panel">
                     <div className="term-edit-grid">
-                      <input className="settings-select" value={editWord} onChange={(e)=>setEditWord(e.target.value)} placeholder="単語" />
+                      <input className="settings-select" value={editWord} onChange={(e)=>setEditWord(e.target.value)} placeholder="単語" maxLength={100} />
                       <textarea
                         className="settings-select"
                         value={editDef}
                         onChange={(e)=>setEditDef(e.target.value)}
                         placeholder="定義"
                         rows={4}
+                        maxLength={500}
                         style={{ resize:"vertical" }}
                       />
                     </div>

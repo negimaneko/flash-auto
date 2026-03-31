@@ -33,6 +33,11 @@ function cleanup(windowMs) {
  * Vercel では x-forwarded-for ヘッダーにクライアントIPが入る。
  */
 export function getClientIp(req) {
+  // Vercel が設定する x-real-ip はクライアント偽装不可（プラットフォーム側で上書き）
+  const realIp = req.headers["x-real-ip"];
+  if (realIp) {
+    return String(realIp).trim();
+  }
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
     return String(forwarded).split(",")[0].trim();

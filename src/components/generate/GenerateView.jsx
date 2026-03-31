@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { CharCount } from "../shared/CharCount.jsx";
 import { LanguageInput } from "../shared/LanguageInput.jsx";
-import { LIMITS, AI_GENERATE_DAILY_LIMIT, DETAIL_LEVELS } from "../../constants.js";
+import { LIMITS, DETAIL_LEVELS } from "../../constants.js";
 import { getAnonymousUserId, trackEvent } from "../../lib/tracking.js";
 import { fetchDeckFromCacheOrGenerate } from "../../api.js";
 import { uid, normalizeLanguageValue, getLangLabel } from "../../utils.js";
 
-export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
+export function GenerateView({onSave,onBack,showToast}) {
   const [topic, setTopic] = useState("");
   const [mustIncludeWords, setMustIncludeWords] = useState("");
   const [wordLang, setWordLang] = useState("technical");
@@ -16,7 +16,6 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
   const [generated, setGenerated] = useState(null);
   const [generatedCacheId, setGeneratedCacheId] = useState(null);
   const [fromCache, setFromCache] = useState(false);
-  const [remainingCredits, setRemainingCredits] = useState(AI_GENERATE_DAILY_LIMIT);
   const [loading, setLoading] = useState(false);
   const [continuing, setContinuing] = useState(false);
   const [error, setError] = useState("");
@@ -70,7 +69,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
     setNewDef("");
   };
 
-  const applyGeneratedDeckResult = (deck, cacheId, creditsLeft, fallbackDefLang, source) => {
+  const applyGeneratedDeckResult = (deck, cacheId, fallbackDefLang, source) => {
     setFromCache(source === "cache");
     const cards = (deck?.cards || []).map((card) => ({
       id: uid(),
@@ -95,11 +94,6 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
       cards,
     });
     setGeneratedCacheId(cacheId || null);
-    if (typeof creditsLeft === "number") {
-      const next = Math.max(0, creditsLeft);
-      setRemainingCredits(next);
-      onCreditsUpdate?.(next);
-    }
   };
 
   const startGenerate = async () => {
@@ -129,7 +123,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
         userId,
         ...(mustIncludeWords.trim() ? { mustIncludeWords: mustIncludeWords.trim() } : {}),
       });
-      applyGeneratedDeckResult(result.deck, result.cacheId, result.remainingCredits, normalizedDefLang, result.source);
+      applyGeneratedDeckResult(result.deck, result.cacheId, normalizedDefLang, result.source);
       trackEvent("generate_theme_deck", {
         theme: topic.trim(),
         deck_id: result.cacheId || null,
@@ -140,16 +134,12 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
       });
 
       if (result.source === "cache") {
-        showToast("以前に生成済みの内容を表示しました（クレジット消費なし）");
+        showToast("以前に生成済みの内容を表示しました");
       } else {
         showToast("新しい単語帳を生成しました");
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
-      if (typeof e.remainingCredits === "number") {
-        setRemainingCredits(e.remainingCredits);
-        onCreditsUpdate?.(e.remainingCredits);
-      }
       trackEvent("generate_theme_deck", {
         theme: topic.trim(),
         generation_latency_ms: Date.now() - t0,
@@ -201,7 +191,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
           ? result.deck.cards
           : [...generated.cards.map(c => ({ word: c.word, definition: c.definition })), ...(result.deck?.cards || [])],
       };
-      applyGeneratedDeckResult(mergedDeck, result.cacheId || generatedCacheId, result.remainingCredits, generated.defLang);
+      applyGeneratedDeckResult(mergedDeck, result.cacheId || generatedCacheId, generated.defLang);
       trackEvent("generate_theme_deck", {
         theme: topic.trim() || generated.name,
         deck_id: result.cacheId || generatedCacheId || null,
@@ -213,10 +203,6 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
       showToast(`${result.addedCount || 0}枚のカードを追加しました`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "続きの生成に失敗しました。";
-      if (typeof e.remainingCredits === "number") {
-        setRemainingCredits(e.remainingCredits);
-        onCreditsUpdate?.(e.remainingCredits);
-      }
       trackEvent("generate_theme_deck", {
         theme: topic.trim() || generated?.name,
         generation_latency_ms: Date.now() - t0,
@@ -257,6 +243,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="例：量子力学の入門（※1回につき10〜15枚のカードが生成されます）"
+              maxLength={LIMITS.TOPIC}
               style={topic.length > LIMITS.TOPIC ? { borderColor: "var(--red)" } : {}}
             />
             <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -274,6 +261,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
               value={mustIncludeWords}
               onChange={(e) => setMustIncludeWords(e.target.value)}
               placeholder="例：entropy, quantum, photon（カンマ区切りで入力）"
+              maxLength={LIMITS.MUST}
               style={mustIncludeWords.length > LIMITS.MUST ? { borderColor: "var(--red)" } : {}}
             />
             <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -305,31 +293,16 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
             </label>
           </div>
 
-          <div style={{ color: "var(--text3)", fontSize: 13, display: "grid", gap: 4 }}>
+          <div style={{ color: "var(--text3)", fontSize: 13 }}>
             <span>AI生成は基本10枚、必要なら超重要語句を最大5枚まで追加します / {selectedDetail.desc}</span>
-            <span>匿名ユーザーごとに1日{AI_GENERATE_DAILY_LIMIT}クレジットです。キャッシュヒット時は消費せず、初回生成と続き追加が各1クレジットです。</span>
           </div>
 
-          {remainingCredits === 0 ? (
-            <div className="credit-zero-panel">
-              <div className="credit-zero-icon">💤</div>
-              <div className="credit-zero-body">
-                <strong>本日の生成回数（{AI_GENERATE_DAILY_LIMIT}回）を使い切りました</strong>
-                <span>深夜0時にリセットされます。それまでの間、保存済みの単語帳で学習できます。</span>
-              </div>
-              <button className="nbtn ghost" onClick={onBack}>学習に戻る</button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="nbtn primary" onClick={startGenerate} disabled={loading || !topic.trim() || topic.length > LIMITS.TOPIC || mustIncludeWords.length > LIMITS.MUST}>
-                {loading ? "生成中..." : "単語帳を生成"}
-              </button>
-              <button className="nbtn" onClick={onBack}>キャンセル</button>
-              {remainingCredits === 1 && (
-                <span className="credit-warn-badge">⚠️ 残り1回</span>
-              )}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="nbtn primary" onClick={startGenerate} disabled={loading || !topic.trim() || topic.length > LIMITS.TOPIC || mustIncludeWords.length > LIMITS.MUST}>
+              {loading ? "生成中..." : "単語帳を生成"}
+            </button>
+            <button className="nbtn" onClick={onBack}>キャンセル</button>
+          </div>
 
           {error && (
             <div style={{ color: "#b91c1c", background: "#fee2e2", padding: 12, borderRadius: 12 }}>
@@ -347,7 +320,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
               <span className="cache-hit-icon">♻️</span>
               <div className="cache-hit-body">
                 <strong>以前に生成済みの内容を表示しています</strong>
-                <span>同じテーマは再生成されません。クレジットは消費されていません。内容を変えたい場合は「必ず含める単語」を追加するか、テーマを変えてください。</span>
+                <span>同じテーマは再生成されません。内容を変えたい場合は「必ず含める単語」を追加するか、テーマを変えてください。</span>
               </div>
             </div>
           )}
@@ -371,6 +344,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                     value={card.word}
                     onChange={(e) => updateCard(card.id, "word", e.target.value)}
                     placeholder="単語"
+                    maxLength={LIMITS.WORD}
                     style={card.word.length > LIMITS.WORD ? { borderColor:"var(--red)" } : {}}
                   />
                   <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -382,6 +356,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                     onChange={(e) => updateCard(card.id, "definition", e.target.value)}
                     placeholder="定義"
                     rows={4}
+                    maxLength={LIMITS.DEF}
                     style={{ resize: "vertical", ...(card.definition.length > LIMITS.DEF ? { borderColor:"var(--red)" } : {}) }}
                   />
                   <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -400,6 +375,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                 value={newWord}
                 onChange={(e) => setNewWord(e.target.value)}
                 placeholder="単語"
+                maxLength={LIMITS.WORD}
               />
               <textarea
                 className="settings-select"
@@ -407,6 +383,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
                 onChange={(e) => setNewDef(e.target.value)}
                 placeholder="定義"
                 rows={3}
+                maxLength={LIMITS.DEF}
                 style={{ resize: "vertical" }}
               />
               <div>
@@ -419,7 +396,7 @@ export function GenerateView({onSave,onBack,showToast,onCreditsUpdate}) {
             <button className="nbtn primary" onClick={saveDeck} disabled={generated?.cards.some(c => c.word.length > LIMITS.WORD || c.definition.length > LIMITS.DEF)}>単語帳を保存</button>
             <button className="nbtn" onClick={startGenerate} disabled={loading}>再生成</button>
             <button className="nbtn" onClick={continueGenerate} disabled={continuing || loading || !generatedCacheId}>
-              {continuing ? "追加生成中..." : "1クレジットで続きを5〜10枚追加"}
+              {continuing ? "追加生成中..." : "続きを5〜10枚追加"}
             </button>
           </div>
         </div>

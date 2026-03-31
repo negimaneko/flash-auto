@@ -134,7 +134,9 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
         showToast?.(mastery.message, "info");
       }
     } catch {
-      // Ignore AI mastery failures and keep the local result screen.
+      const correctCount = finalResults.filter((r) => r.correct).length;
+      const total = finalResults.length;
+      showToast?.(`結果: ${correctCount}/${total} 正解（AI判定は利用できませんでした）`, "info");
     }
     setDone(true);
     submittingRef.current = false;
@@ -203,7 +205,9 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
       message = "正解";
     } else {
       try {
-        const judged = await aiEval(current.word, current.definition, guess, deck.defLang);
+        const { question, answer: correctAns } = getQA(current);
+        const evalLang = answerDir === "word" ? deck.wordLang : deck.defLang;
+        const judged = await aiEval(question, correctAns, guess, evalLang);
         ok = Boolean(judged?.correct);
         message = judged?.feedback || (ok ? "正解" : "答え: " + answer);
       } catch {

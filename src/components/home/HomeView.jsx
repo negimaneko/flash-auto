@@ -8,7 +8,7 @@ import { getAnonymousUserId, trackEvent } from "../../lib/tracking.js";
 import { fetchDeckFromCacheOrGenerate } from "../../api.js";
 import { uid } from "../../utils.js";
 
-export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash}) {
+export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash}) {
   const [filter,setFilter] = useState("all");
   const [quickTopic, setQuickTopic] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
@@ -105,7 +105,6 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
     <div className="page">
       <Navbar onMenuClick={onMenuClick} right={
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <div className={"credit-badge"+(credits===0?" credit-badge-zero":credits===1?" credit-badge-warn":"")}><svg className="credit-gem" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 10 12 22 22 10"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="12" y1="2" x2="7" y2="10"/><line x1="12" y1="2" x2="17" y2="10"/><line x1="7" y1="10" x2="12" y2="22"/><line x1="17" y1="10" x2="12" y2="22"/></svg><span>{credits}</span></div>
           <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
           <button className="nbtn primary" onClick={onNew}>手動作成</button>
         </div>
@@ -116,7 +115,6 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
           onHome={()=>setFilter("all")}
           onMyLibrary={()=>{setFilter("all");setTimeout(()=>document.getElementById("my-set-section")?.scrollIntoView({behavior:"smooth"}),50);}}
           onLibrary={onLibrary}
-          credits={credits}
         />
 
         <main className="shell-main">
@@ -139,6 +137,7 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
                   }}
                   placeholder="例：量子力学、TOEFL、経済学..."
                   disabled={quickLoading}
+                  maxLength={LIMITS.TOPIC}
                   style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
                 />
                 <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
@@ -218,6 +217,7 @@ export function HomeView({decks,credits,onOpenDetail,onNew,onGenerate,onLibrary,
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="セット名・タグ・単語で検索..."
+                maxLength={100}
               />
               {searchQuery && (
                 <button className="set-search-clear" onClick={() => setSearchQuery("")} aria-label="クリア">✕</button>

@@ -62,8 +62,7 @@ npm run dev   # http://localhost:5173 で起動
 | 単語定義（callAI） | Ollama → Groq → Gemini | `src/api.js` のフォールバックチェーン |
 
 ## 保留タスク
-- [ ] **GEMINI_API_KEYを.env.localに追加した直後に `API.md` を作成すること**
-  - 内容: デッキ生成=Gemini 2.5 Flash-Lite（deck-cache.js→_shared/gemini.js）、キャラクター検証=Groq Llama 3.3 70B（deck-cache.js→_shared/groq.js）、単語定義callAI=Ollama→Groq→Gemini
+- [x] **GEMINI_API_KEYを.env.localに追加した直後に `API.md` を作成すること**（完了）
 
 ## 応答品質ルール
 - ユーザーの指示が短い・曖昧な場合、実行前に内部で以下を補完して考えること：

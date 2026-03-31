@@ -45,7 +45,6 @@ export const LANGUAGES = [
   { code: "ja", label: "日本語", native: "日本語" },
 ];
 
-export const AI_GENERATE_DAILY_LIMIT = 3;
 
 export const LIMITS = { NAME: 50, TOPIC: 200, MUST: 200, WORD: 100, DEF: 500 };
 
