@@ -46,13 +46,9 @@ npm run dev   # http://localhost:5173 で起動
 | `OLLAMA_BASE_URL` | Ollama接続先 | Ollama使用時 |
 | `OLLAMA_MODEL` | 使用モデル名（例: qwen3:1.7b） | Ollama使用時 |
 | `GROQ_API_KEY` | Groq APIキー（OllamaのフォールバックAI） | 推奨 |
+| `GEMINI_API_KEY` | Gemini APIキー（デッキ生成用） | Gemini使用時 |
 | `SUPABASE_URL` | SupabaseプロジェクトURL | 共有キャッシュ使用時 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase認証キー | 共有キャッシュ使用時 |
-
-## 環境変数（.env.local）追記
-| 変数名 | 用途 | 必須 |
-|--------|------|------|
-| `GEMINI_API_KEY` | Gemini APIキー（デッキ生成用） | Gemini使用時 |
 
 ## AIプロバイダー構成（GEMINI_API_KEY設定後）
 | 用途 | モデル | 経路 |
@@ -61,8 +57,21 @@ npm run dev   # http://localhost:5173 で起動
 | キャラクター検証 | Groq (Llama 3.3 70B) | `deck-cache.js` → `_shared/groq.js` |
 | 単語定義（callAI） | Ollama → Groq → Gemini | `src/api.js` のフォールバックチェーン |
 
-## 保留タスク
-- [x] **GEMINI_API_KEYを.env.localに追加した直後に `API.md` を作成すること**（完了）
+## ディレクトリ構造
+```
+api/              # Vercel Serverless API
+  _shared/        # 共有ユーティリティ（gemini.js, groq.js等）
+  deck-cache.js   # デッキ生成・キャッシュAPI
+  post-x.js       # X投稿API
+  notify-telegram.js  # Telegram通知API
+src/              # フロントエンド（React）
+  components/     # UIコンポーネント
+  api.js          # API呼び出し・AIフォールバックチェーン
+  App.jsx         # ルートコンポーネント
+supabase/         # DB スキーマ・マイグレーション
+docs/             # 機能仕様書
+scripts/          # ユーティリティスクリプト
+```
 
 ## 応答品質ルール
 - ユーザーの指示が短い・曖昧な場合、実行前に内部で以下を補完して考えること：
@@ -79,6 +88,11 @@ npm run dev   # http://localhost:5173 で起動
 2. **考察**：どう修正すべきか方針を決める。複数案がある場合は比較する
 3. **実行**：修正を行う
 4. **検証**：修正後に不具合がないかテストする。問題があれば1に戻る
+
+## CC Tools 提案ルール
+- ユーザーの作業中に「このタスクはもっと良いツールやスキルで解決できそう」と感じたら、Notion「CC Tools」DB（DB ID: `d7504663-b810-4297-8dea-af4d2b3d9237`）を参照し、未導入（導入済み=false）のツールから提案する
+- 提案は作業の邪魔にならない程度に、1回の会話で最大1回まで
+- 提案形式：「CC Toolsに〇〇があります。△△に使えそうですが、見てみますか？」
 
 ## 禁止事項
 - 存在しない情報を生成するな
