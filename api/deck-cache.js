@@ -27,7 +27,7 @@ function getVerificationLLM() {
   return requestGroqChat;
 }
 
-const DAILY_CREDIT_LIMIT = Number(process.env.AI_GENERATE_DAILY_LIMIT || 3);
+// クレジット制限は撤廃済み - 使用量は分析用に記録のみ
 
 function normalizeLanguageValue(value, fallback = "ja") {
   const text = String(value ?? "").trim();
@@ -630,26 +630,9 @@ async function readCredits(supabase, userId, usageDate) {
   return data?.[0]?.count || 0;
 }
 
-async function consumeCredit(supabase, userId, usageDate, clientIp) {
-  // IPベースのクレジットチェックを最優先（userId偽装によるバイパス防止）
-  const ipKey = `ip:${clientIp}`;
-  if (clientIp && clientIp !== "unknown") {
-    const usedByIp = await readCredits(supabase, ipKey, usageDate);
-    if (usedByIp >= DAILY_CREDIT_LIMIT) {
-      throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
-    }
-  } else {
-    // IP不明の場合はuserIdのみで判定（厳しめ: 1回少なく制限）
-    console.warn("[deck-cache] Client IP unknown, relying on userId only");
-  }
-
+async function recordUsage(supabase, userId, usageDate, clientIp) {
   const usedByUser = await readCredits(supabase, userId, usageDate);
-  if (usedByUser >= DAILY_CREDIT_LIMIT) {
-    throw new Error(`今日のクレジット（${DAILY_CREDIT_LIMIT}回）を使い切りました。明日またお試しください。`);
-  }
-
   const nextUserCredits = usedByUser + 1;
-  // userId のカウントを更新
   const { error } = await supabase
     .from("daily_generate_usage")
     .upsert({
@@ -662,8 +645,9 @@ async function consumeCredit(supabase, userId, usageDate, clientIp) {
 
   if (error) throw new Error(error.message);
 
-  // IPのカウントも更新
+  // IPのカウントも記録（分析用）
   if (clientIp && clientIp !== "unknown") {
+    const ipKey = `ip:${clientIp}`;
     const ipUsed = await readCredits(supabase, ipKey, usageDate);
     const { error: ipError } = await supabase
       .from("daily_generate_usage")
@@ -674,10 +658,8 @@ async function consumeCredit(supabase, userId, usageDate, clientIp) {
       }, {
         onConflict: "user_id,usage_date",
       });
-    if (ipError) console.warn("[deck-cache] IP credit tracking failed:", ipError.message);
+    if (ipError) console.warn("[deck-cache] IP usage tracking failed:", ipError.message);
   }
-
-  return Math.max(0, DAILY_CREDIT_LIMIT - nextUserCredits);
 }
 
 async function fetchCachedDeck(supabase, topicKey, defLang) {
@@ -875,7 +857,6 @@ export default async function handler(req, res) {
         const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
         return res.status(200).json({
           source: "generated",
-          remainingCredits: null,
           cacheId: null,
           deck: {
             deckName: generated.deckName,
@@ -904,7 +885,6 @@ export default async function handler(req, res) {
         return res.status(200).json({
           source: "continued",
           addedCount: continuationCards.length,
-          remainingCredits: null,
           cacheId: null,
           deck: { cards: continuationCards },
         });
@@ -915,24 +895,18 @@ export default async function handler(req, res) {
 
     // --- Supabase設定済み: キャッシュ・クレジットあり ---
     if (action === "initial") {
-      const usedByUser = await readCredits(supabase, userId, usageDate);
-      const ipKey = `ip:${clientIp}`;
-      const usedByIp = (clientIp && clientIp !== "unknown") ? await readCredits(supabase, ipKey, usageDate) : 0;
-      const remainingCredits = Math.max(0, DAILY_CREDIT_LIMIT - Math.max(usedByUser, usedByIp));
-
       // mustIncludeWords が指定されている場合はキャッシュを使わず新規生成
       if (!mustIncludeWords) {
         const cached = await fetchCachedDeck(supabase, topicKey, defLang);
         if (cached) {
           return res.status(200).json({
             source: "cache",
-            remainingCredits,
             ...mapDeckRow(cached, detailLevel),
           });
         }
       }
 
-      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate, clientIp);
+      await recordUsage(supabase, userId, usageDate, clientIp);
       const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
 
       const { data, error } = await supabase
@@ -957,7 +931,6 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         source: "generated",
-        remainingCredits: remainingAfterConsume,
         ...mapDeckRow(data[0], detailLevel),
       });
     }
@@ -980,7 +953,7 @@ export default async function handler(req, res) {
         ...existingWords,
       ].filter(Boolean);
 
-      const remainingAfterConsume = await consumeCredit(supabase, userId, usageDate, clientIp);
+      await recordUsage(supabase, userId, usageDate, clientIp);
       const continuationCards = await generateContinuationCards({
         topic: cached.topic || topic,
         wordLang: cached.word_lang || wordLang,
@@ -1010,7 +983,6 @@ export default async function handler(req, res) {
       return res.status(200).json({
         source: "continued",
         addedCount: continuationCards.length,
-        remainingCredits: remainingAfterConsume,
         ...mapDeckRow(data[0], detailLevel),
       });
     }
@@ -1018,9 +990,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Unsupported action" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load deck cache";
-    const status = /今日のクレジット/.test(message) ? 429 : 500;
-    console.error(`[/api/deck-cache] ${status} error:`, message);
-    return res.status(status).json({ error: message, remainingCredits: status === 429 ? 0 : undefined });
+    console.error(`[/api/deck-cache] 500 error:`, message);
+    return res.status(500).json({ error: message });
   }
 }
 

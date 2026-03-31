@@ -3,7 +3,7 @@ import { Navbar } from "../shared/Navbar.jsx";
 import { AppSidebar } from "../layout/AppSidebar.jsx";
 import { DeckCard } from "../home/DeckCard.jsx";
 
-export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick,credits}) {
+export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick}) {
   const [query,setQuery]=useState("");
   const [activeTag,setActiveTag]=useState(null);
   const allTags=[...new Set(decks.flatMap((deck)=>deck.tags||[]))].sort();
@@ -26,7 +26,6 @@ export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick,c
           active="library"
           onHome={onBack}
           onLibrary={()=>{}}
-          credits={credits}
         />
 
         <main className="shell-main">

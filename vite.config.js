@@ -276,7 +276,6 @@ async function handleDeckCacheProxy(req, res) {
       const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords })
       sendJson(res, 200, {
         source: 'generated',
-        remainingCredits: null,
         cacheId: null,
         deck: {
           deckName: generated.deckName,
@@ -302,7 +301,6 @@ async function handleDeckCacheProxy(req, res) {
       sendJson(res, 200, {
         source: 'continued',
         addedCount: continuationCards.length,
-        remainingCredits: null,
         cacheId: null,
         deck: { cards: continuationCards },
       })
