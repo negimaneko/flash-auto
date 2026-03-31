@@ -30,7 +30,7 @@ function getVerificationLLM() {
   return requestGroqChat;
 }
 
-const DAILY_CREDIT_LIMIT = Number(process.env.AI_GENERATE_DAILY_LIMIT || 3);
+const DAILY_CREDIT_LIMIT = Number(process.env.AI_GENERATE_DAILY_LIMIT || 10);
 
 function normalizeLanguageValue(value, fallback = "ja") {
   const text = String(value ?? "").trim();
