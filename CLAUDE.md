@@ -54,10 +54,10 @@ npm run dev   # http://localhost:5173 で起動
 |--------|------|------|
 | `GEMINI_API_KEY` | Gemini APIキー（デッキ生成用） | Gemini使用時 |
 
-## AIプロバイダー構成（GEMINI_API_KEY設定後）
+## AIプロバイダー構成
 | 用途 | モデル | 経路 |
 |------|--------|------|
-| デッキ生成 | Gemini 2.5 Flash-Lite | `deck-cache.js` → `_shared/gemini.js` |
+| デッキ生成 | Groq (Llama 3.3 70B) | `deck-cache.js` → `_shared/groq.js` |
 | キャラクター検証 | Groq (Llama 3.3 70B) | `deck-cache.js` → `_shared/groq.js` |
 | 単語定義（callAI） | Ollama → Groq → Gemini | `src/api.js` のフォールバックチェーン |
 

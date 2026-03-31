@@ -1,5 +1,4 @@
 import { requestGroqChat } from "./_shared/groq.js";
-import { requestGeminiChat } from "./_shared/gemini.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
 import { checkRateLimit, getClientIp } from "./_shared/rate-limit.js";
@@ -9,23 +8,13 @@ import { fetchCharacterData } from "./_shared/wikipedia.js";
 export const config = { maxDuration: 60 };
 
 /**
- * デッキ生成用LLMを選択する。
- * GEMINI_API_KEY が設定されていれば Gemini を使い、なければ従来通り Groq を使う。
- * キャラクター検証(verifyCharacterCards)は常に Groq を使う（クロスモデル検証のため）。
+ * デッキ生成・キャラクター検証ともに Groq (Llama 3.3 70B) を使用。
+ * 単語帳生成（用語＋定義のJSON出力）にはGroqで十分な能力があり、無料で使える。
  */
 function getDeckGenerationLLM() {
-  if (process.env.GEMINI_API_KEY) {
-    return requestGeminiChat;
-  }
   return requestGroqChat;
 }
 
-/**
- * キャラクター検証用LLMを選択する。
- * 生成と異なるモデルで検証する「クロスモデル検証」を実現するため、
- * Geminiで生成する場合は検証にGroqを、Groqで生成する場合でもGroqを使う。
- * 将来的に検証専用モデルを変更する場合はここだけ変えればよい。
- */
 function getVerificationLLM() {
   return requestGroqChat;
 }
@@ -729,9 +718,7 @@ async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, must
   const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
   const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords, searchedNames, searchedCharacters });
   const maxTokens = detailLevel === 3 ? 6000 : 4000;
-  // Wikipedia検索が成功した場合、LLMの役割は「整形・要約」に限定されるため
-  // 有料のGeminiではなく無料のGroqで十分
-  const generateLLM = _callGenerateLLM ?? (searchedCharacters ? requestGroqChat : getDeckGenerationLLM());
+  const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
   const raw = await generateLLM({ prompt, maxTokens, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
   const rawCards = parsed.cards || [];
@@ -813,8 +800,7 @@ async function generateContinuationCards({ topic, wordLang, defLang, detailLevel
 
   const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
   const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords, searchedNames, searchedCharacters });
-  // Wikipedia検索成功時はGroqで十分（整形・要約のみ）
-  const generateLLM = _callGenerateLLM ?? (searchedCharacters ? requestGroqChat : getDeckGenerationLLM());
+  const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
   const raw = await generateLLM({ prompt, maxTokens: 2500, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
   const rawCards = parsed.cards || [];

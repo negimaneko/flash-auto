@@ -1320,27 +1320,9 @@ describe("回帰テスト: ハズビンホテルのキャラクター (外部照
 // getDeckGenerationLLM / getVerificationLLM（プロバイダー切り替え）
 // ====================================================================
 describe("getDeckGenerationLLM", () => {
-  const originalEnv = process.env.GEMINI_API_KEY;
-
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.GEMINI_API_KEY = originalEnv;
-    } else {
-      delete process.env.GEMINI_API_KEY;
-    }
-  });
-
-  it("GEMINI_API_KEY が未設定のとき、Groq (requestGroqChat) を返す", () => {
-    delete process.env.GEMINI_API_KEY;
+  it("常に Groq (requestGroqChat) を返す", () => {
     const llm = getDeckGenerationLLM();
-    // Groq の関数名で判定
     expect(llm.name).toBe("requestGroqChat");
-  });
-
-  it("GEMINI_API_KEY が設定されているとき、Gemini (requestGeminiChat) を返す", () => {
-    process.env.GEMINI_API_KEY = "test-key";
-    const llm = getDeckGenerationLLM();
-    expect(llm.name).toBe("requestGeminiChat");
   });
 });
 
