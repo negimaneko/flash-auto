@@ -179,8 +179,53 @@ function extractDataFromSection(sectionText) {
   const lines = sectionText.split("\n");
   let currentName = null;
   let currentDesc = [];
+  let insideTable = false;
+  let tableHeaders = []; // wikitable のヘッダー列名
 
   for (const line of lines) {
+    // ---- wikitable パース: {| ... |} 内の行からキャラクター情報を抽出 ----
+    if (/^\{\|/.test(line.trim())) {
+      insideTable = true;
+      tableHeaders = [];
+      continue;
+    }
+    if (insideTable) {
+      if (/^\|\}/.test(line.trim())) {
+        insideTable = false;
+        tableHeaders = [];
+        continue;
+      }
+      // ヘッダー行: !名前!!正式名!!動物の種類!!...
+      if (/^!/.test(line.trim())) {
+        tableHeaders = line.replace(/^!\s*/, "").split(/!!/).map(h => cleanDescription(h).trim());
+        continue;
+      }
+      // データ行: |ルビー||ルビー||ウサギ||...
+      if (/^\|[^-}]/.test(line.trim())) {
+        const cells = line.replace(/^\|\s*/, "").split(/\|\|/).map(c => cleanDescription(c).replace(/^\|+\s*/, "").trim());
+        if (cells.length >= 2 && cells[0]) {
+          const charName = cleanName(cells[0]);
+          if (charName) {
+            // ヘッダーがあれば「列名: 値」形式で説明文を構築、なければ2列目以降を結合
+            const descParts = [];
+            for (let i = 1; i < cells.length; i++) {
+              if (!cells[i]) continue;
+              if (tableHeaders.length > i && tableHeaders[i]) {
+                descParts.push(`${tableHeaders[i]}: ${cells[i]}`);
+              } else {
+                descParts.push(cells[i]);
+              }
+            }
+            if (descParts.length > 0) {
+              results.set(charName, descParts.join("。"));
+            }
+          }
+        }
+      }
+      // セパレータ行 |- や空行はスキップ
+      continue;
+    }
+
     // パターン1: 定義リスト形式 「; キャラ名」
     const defListMatch = line.match(/^;\s*(.+)/);
     if (defListMatch) {
@@ -296,6 +341,9 @@ function cleanDescription(raw) {
 
   // HTMLタグ除去
   desc = desc.replace(/<[^>]+>/g, "");
+
+  // wikitable {| ... |} 除去
+  desc = desc.replace(/\{\|[\s\S]*?\|\}/g, "");
 
   // テンプレート {{...}} 除去（ネストあり対応: 最大2レベル）
   desc = desc.replace(/\{\{[^{}]*(?:\{\{[^{}]*\}\}[^{}]*)*\}\}/g, "");
