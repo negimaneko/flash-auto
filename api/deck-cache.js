@@ -819,7 +819,7 @@ async function generateContinuationCards({ topic, wordLang, defLang, detailLevel
     }
     checkCharacterDeckRatio(rawCards.length, finalCards.length, topic);
   }
-  return sanitizeCards(finalCards, 3, 10, existingWords);
+  return sanitizeCards(finalCards, 0, 10, existingWords);
 }
 
 export default async function handler(req, res) {
