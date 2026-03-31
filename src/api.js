@@ -163,6 +163,49 @@ export async function aiEval(term, correctDef, userAns, defLang) {
   }
 }
 
+// ─── 公開ライブラリ API ───
+
+export async function fetchPublicDecks({ q, tag, limit, offset } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (tag) params.set("tag", tag);
+  if (limit) params.set("limit", String(limit));
+  if (offset) params.set("offset", String(offset));
+  const url = "/api/public-library" + (params.toString() ? "?" + params : "");
+  const r = await fetch(url);
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || "公開デッキの取得に失敗しました。");
+  }
+  return r.json();
+}
+
+export async function publishDeck(deck, userId) {
+  const r = await fetch("/api/public-library", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "publish", deck, userId }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || "公開に失敗しました。");
+  }
+  return r.json();
+}
+
+export async function togglePublicFav(deckId, delta) {
+  const r = await fetch("/api/public-library", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "fav", deckId, delta }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || "お気に入り更新に失敗しました。");
+  }
+  return r.json();
+}
+
 export async function aiMastery(results) {
   try {
     const prompt = `Judge whether this study result means the learner mastered the deck. Result: ${JSON.stringify(results)}\nReturn JSON only: {"cleared":true/false,"message":"short message in Japanese"}`;

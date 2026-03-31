@@ -1,10 +1,11 @@
 import { FEEDBACK_FORM_URL } from "../shared/FeedbackFab.jsx";
 
-export function MobileDrawer({open,onClose,onHome,onMyLibrary,onLibrary,onGenerate,onNew,activeView}) {
+export function MobileDrawer({open,onClose,onHome,onMyLibrary,onLibrary,onGenerate,onNew,onStats,activeView}) {
   const items = [
     { id:"home", label:"ホーム", icon:"🏠", action:onHome },
     { id:"my-library", label:"マイセット", icon:"📚", desc:"作成した単語帳", action:onMyLibrary || onHome },
     { id:"library", label:"公開ライブラリ", icon:"🌐", action:onLibrary },
+    { id:"stats", label:"学習統計", icon:"📊", desc:"進捗を確認", action:onStats },
   ];
   return (
     <>

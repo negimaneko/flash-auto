@@ -11,7 +11,7 @@ export function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
         <div className="study-set-icon">{theme.icon}</div>
         <div className="study-set-badges">
           {deck.aiGenerated && <span className="study-badge">AI</span>}
-          {deck.cleared && <span className="study-badge">達成</span>}
+          {deck.cleared && <span className="study-badge cleared-badge">{"\uD83C\uDFC6"} クリア</span>}
         </div>
       </div>
       <div className="study-set-content">

@@ -4,7 +4,7 @@ import { shuffle } from "../../utils.js";
 import { aiEval, aiMastery } from "../../api.js";
 import { trackEvent } from "../../lib/tracking.js";
 
-export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast}) {
+export function QuizView({deck,mode,isTest,onBack,onCleared,onUpdateStreaks,showToast}) {
   const cards = deck?.cards || [];
   const [answerDir, setAnswerDir] = useState(null);
   const [queue, setQueue] = useState(() => shuffle(cards));
@@ -20,6 +20,17 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
   const [startTime, setStartTime] = useState(() => Date.now());
   const [elapsedSec, setElapsedSec] = useState(0);
   const submittingRef = useRef(false);
+
+  const testLabel = isTest
+    ? (mode === "choice" ? "選択式テスト" : "記述式テスト")
+    : (mode === "choice" ? "4択クイズ" : "記述クイズ");
+
+  const handleBack = () => {
+    if (isTest && !done && qi > 0) {
+      if (!window.confirm("テストを中断しますか？\n進行状況はリセットされます。")) return;
+    }
+    onBack();
+  };
 
   const resetQuiz = () => {
     const shuffled = shuffle(cards);
@@ -60,16 +71,16 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
 
   if (!cards.length) {
     return (
-      <div className="study-page">
+      <div className={"study-page" + (isTest ? " test-mode" : "")}>
         <div className="study-nav">
           <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">クイズ: {deck?.name || "無題"}</span>
+          <span className="study-deck-title">{testLabel}: {deck?.name || "無題"}</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="study-wrap">
           <div className="empty-state">
             <h3>カードがありません</h3>
-            <p>クイズを始める前にカードを追加してください。</p>
+            <p>カードを追加してから開始してください。</p>
           </div>
         </div>
       </div>
@@ -78,14 +89,15 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
 
   if (!answerDir) {
     return (
-      <div className="study-page">
+      <div className={"study-page" + (isTest ? " test-mode" : "")}>
         <div className="study-nav">
-          <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">{mode === "choice" ? "4択クイズ" : "記述クイズ"}: {deck.name}</span>
+          <button className="nbtn ghost" onClick={handleBack}>戻る</button>
+          <span className="study-deck-title">{testLabel}: {deck.name}</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="quiz-dir-wrap">
           <h2 className="quiz-dir-title">解答形式を選んでください</h2>
+          {isTest && <p className="test-notice">全問正解で単語帳クリア！</p>}
           <p className="quiz-dir-sub">{deck.cards.length}問 ・ {mode === "choice" ? "4択" : "記述"}</p>
           <div className="quiz-dir-grid">
             <button className="quiz-dir-btn" onClick={() => { resetQuiz(); setAnswerDir("def"); }}>
@@ -110,14 +122,29 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     setElapsedSec(elapsed);
     onUpdateStreaks(deck.id, finalResults);
+    const eventMode = isTest
+      ? (mode === "choice" ? "test_choice" : "test_write")
+      : (mode === "choice" ? "quiz_choice" : "quiz_write");
     trackEvent("review_card", {
       deck_id: deck.id,
       card_count: finalResults.length,
       correct_count: finalResults.filter((r) => r.correct).length,
-      mode: mode === "choice" ? "quiz_choice" : "quiz_write",
+      mode: eventMode,
       elapsed_sec: elapsed,
     });
-    if (finalResults.every((r) => r.correct)) {
+
+    const allCorrect = finalResults.every((r) => r.correct);
+
+    if (isTest) {
+      if (allCorrect) {
+        onCleared(deck.id);
+      }
+      setDone(true);
+      submittingRef.current = false;
+      return;
+    }
+
+    if (allCorrect) {
       onCleared(deck.id);
       showToast?.("単語帳達成です！", "success");
       setDone(true);
@@ -238,16 +265,26 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
     const masteryPercent = cards.length ? Math.round((masteredCount / cards.length) * 100) : 0;
 
     const isChoiceMode = mode === "choice";
+    const passed = percent === 100;
 
     return (
-      <div className="study-page">
+      <div className={"study-page" + (isTest ? " test-mode" : "")}>
         <div className="study-nav">
           <button className="nbtn ghost" onClick={onBack}>戻る</button>
-          <span className="study-deck-title">{isChoiceMode ? "クイズ結果" : "テスト結果"}</span>
+          <span className="study-deck-title">{isTest ? "テスト結果" : (isChoiceMode ? "クイズ結果" : "記述クイズ結果")}</span>
           <div style={{ width: 96 }} />
         </div>
         <div className="study-wrap">
-          <div className="result-summary-card">
+          <div className={"result-summary-card" + (isTest ? (passed ? " test-passed" : " test-failed") : "")}>
+
+            {isTest && (
+              <div className={"test-verdict " + (passed ? "verdict-pass" : "verdict-fail")}>
+                <div className="test-verdict-icon">{passed ? "\uD83C\uDFC6" : ""}</div>
+                <div className="test-verdict-text">{passed ? "合格！単語帳クリア！" : "不合格"}</div>
+                {!passed && <div className="test-verdict-sub">{incorrectCount}問不正解 — もう一度挑戦しましょう</div>}
+              </div>
+            )}
+
             <div className="result-time">あなたのタイム：{formatTime(elapsedSec)}</div>
 
             <div className="result-donut-row">
@@ -264,7 +301,7 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
               </div>
             </div>
 
-            {isChoiceMode && (
+            {!isTest && isChoiceMode && (
               <div className="mastery-section">
                 <div className="mastery-header">達成度（暗記率）</div>
                 <div className="mastery-sub">2回連続正解で暗記と判定されます</div>
@@ -284,19 +321,21 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
               </div>
             )}
 
-            <div className="result-message">
-              {percent === 100
-                ? "満点です！すべてのカードをマスターしました。"
-                : percent >= 70
-                  ? "よく頑張りました。間違えたカードを復習しましょう。"
-                  : "間違えたカードを見直して再挑戦しましょう。"}
-            </div>
+            {!isTest && (
+              <div className="result-message">
+                {percent === 100
+                  ? "満点です！すべてのカードをマスターしました。"
+                  : percent >= 70
+                    ? "よく頑張りました。間違えたカードを復習しましょう。"
+                    : "間違えたカードを見直して再挑戦しましょう。"}
+              </div>
+            )}
 
             <div className="result-answers-title">あなたの回答</div>
             <div className="result-answers-list">
               {queue.map((card, i) => {
                 const r = results.find(x => x.id === card.id);
-                const m = isChoiceMode ? masteryMap.find(x => x.id === card.id) : null;
+                const m = (!isTest && isChoiceMode) ? masteryMap.find(x => x.id === card.id) : null;
                 return (
                   <div key={card.id} className={`result-answer-row ${r?.correct ? "correct" : "incorrect"}`}>
                     <div className="result-answer-icon">{r?.correct ? "\u2713" : "\u2717"}</div>
@@ -312,7 +351,7 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
 
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
               <button className="nbtn" onClick={onBack}>単語帳に戻る</button>
-              <button className="nbtn primary" onClick={() => { resetQuiz(); }}>もう一度</button>
+              <button className="nbtn primary" onClick={() => { resetQuiz(); }}>{isTest ? "再挑戦" : "もう一度"}</button>
             </div>
           </div>
         </div>
@@ -321,10 +360,10 @@ export function QuizView({deck,mode,onBack,onCleared,onUpdateStreaks,showToast})
   }
 
   return (
-    <div className="study-page">
+    <div className={"study-page" + (isTest ? " test-mode" : "")}>
       <div className="study-nav">
-        <button className="nbtn ghost" onClick={onBack}>戻る</button>
-        <span className="study-deck-title">クイズ: {deck.name}</span>
+        <button className="nbtn ghost" onClick={handleBack}>戻る</button>
+        <span className="study-deck-title">{testLabel}: {deck.name}</span>
         <div className="study-progress">{qi + 1} / {queue.length}</div>
       </div>
 

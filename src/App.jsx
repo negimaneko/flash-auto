@@ -4,6 +4,7 @@ import { getAnonymousUserId, trackEvent, isNewUser } from "./lib/tracking.js";
 import { SPLASH_DURATION_MS } from "./constants.js";
 import { SEED_DECKS } from "./data.js";
 import { normalizeDeck, normalizeDecks, uid } from "./utils.js";
+import { publishDeck, togglePublicFav } from "./api.js";
 
 import { ErrorBoundary } from "./components/shared/ErrorBoundary.jsx";
 import { SplashScreen } from "./components/shared/SplashScreen.jsx";
@@ -17,6 +18,7 @@ import { CreateView } from "./components/create/CreateView.jsx";
 import { DetailView } from "./components/detail/DetailView.jsx";
 import { FlipView } from "./components/study/FlipView.jsx";
 import { QuizView } from "./components/study/QuizView.jsx";
+import { StatsView } from "./components/stats/StatsView.jsx";
 
 export { ErrorBoundary };
 
@@ -39,9 +41,23 @@ export default function App() {
   const [activeDeck, setActiveDeck] = useState(null);
   const [editDeck, setEditDeck] = useState(null);
   const [quizMode, setQuizMode] = useState("choice");
+  const [isTestMode, setIsTestMode] = useState(false);
   const [toast, setToast] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  // 公開デッキのお気に入り管理（publicId の Set）
+  const [publicFavIds, setPublicFavIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem("flash_auto_pub_favs");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("flash_auto_pub_favs", JSON.stringify([...publicFavIds]));
+    } catch {}
+  }, [publicFavIds]);
 
   useEffect(() => {
     const newUser = isNewUser();
@@ -74,9 +90,11 @@ export default function App() {
   const goHome = useCallback(() => { setView("home"); setActiveDeck(null); setEditDeck(null); }, []);
   const openDetail = useCallback((deck) => { setActiveDeck(normalizeDeck(deck)); setView("detail"); }, []);
   const startMode = useCallback((mode) => {
-    if (mode==="flip") setView("flip");
-    else if (mode==="quiz-choice") { setQuizMode("choice"); setView("quiz"); }
-    else if (mode==="quiz-write")  { setQuizMode("write");  setView("quiz"); }
+    if (mode==="flip") { setView("flip"); }
+    else if (mode==="quiz-choice") { setQuizMode("choice"); setIsTestMode(false); setView("quiz"); }
+    else if (mode==="quiz-write")  { setQuizMode("write");  setIsTestMode(false); setView("quiz"); }
+    else if (mode==="test-choice") { setQuizMode("choice"); setIsTestMode(true);  setView("quiz"); }
+    else if (mode==="test-write")  { setQuizMode("write");  setIsTestMode(true);  setView("quiz"); }
   }, []);
   const saveDeck = useCallback((deck) => {
     const normalizedDeck = normalizeDeck(deck);
@@ -84,6 +102,16 @@ export default function App() {
       const ex = prev.find(d=>d.id===normalizedDeck.id);
       return ex ? prev.map(d=>d.id===normalizedDeck.id ? normalizedDeck : d) : [...prev, normalizedDeck];
     });
+    // 公開フラグが ON なら Supabase にも投稿（非同期・失敗してもローカル保存は成功扱い）
+    if (normalizedDeck.isPublic) {
+      const userId = getAnonymousUserId();
+      publishDeck(normalizedDeck, userId).then(() => {
+        showToast("公開ライブラリに投稿しました");
+      }).catch((e) => {
+        console.error("公開投稿エラー:", e);
+        showToast("公開ライブラリへの投稿に失敗しました", "err");
+      });
+    }
     showToast("保存しました"); goHome();
   }, [showToast, goHome]);
   const saveGeneratedDeck = useCallback((deck) => {
@@ -112,6 +140,25 @@ export default function App() {
     setDecks(prev=>prev.map(d=>d.id===id
       ? {...d, favorited:!d.favorited, favCount:(d.favCount||0)+(d.favorited?-1:1)} : d));
   }, []);
+  const togglePublicFavorite = useCallback((deck) => {
+    if (!deck.publicId) return;
+    const wasFav = publicFavIds.has(deck.publicId);
+    const delta = wasFav ? -1 : 1;
+    setPublicFavIds(prev => {
+      const next = new Set(prev);
+      wasFav ? next.delete(deck.publicId) : next.add(deck.publicId);
+      return next;
+    });
+    togglePublicFav(deck.publicId, delta).catch((e) => {
+      console.error("公開fav更新エラー:", e);
+      // ロールバック
+      setPublicFavIds(prev => {
+        const next = new Set(prev);
+        wasFav ? next.add(deck.publicId) : next.delete(deck.publicId);
+        return next;
+      });
+    });
+  }, [publicFavIds]);
   const markCleared = useCallback((id) => setDecks(prev=>prev.map(d=>d.id===id?{...d,cleared:true}:d)), []);
   const updateCard = useCallback((deckId, cardId, nw, nd) => {
     const patch = d => d.id===deckId ? normalizeDeck({...d,cards:d.cards.map(c=>c.id===cardId?{...c,word:nw,definition:nd}:c)}) : d;
@@ -142,6 +189,44 @@ export default function App() {
     setDecks(prev => prev.map(patch));
     setActiveDeck(prev => prev && prev.id === deckId ? patch(prev) : prev);
   }, []);
+  const importDeck = useCallback((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.format !== "flash_auto_deck" || !data.deck) {
+          showToast("対応していないファイル形式です", "err");
+          return;
+        }
+        const d = data.deck;
+        if (!d.name || !Array.isArray(d.cards) || d.cards.length === 0) {
+          showToast("デッキ名またはカードがありません", "err");
+          return;
+        }
+        const newDeck = normalizeDeck({
+          id: "imp-" + uid(),
+          name: d.name,
+          author: d.author || "インポート",
+          isPublic: false,
+          wordLang: d.wordLang || "ja",
+          defLang: d.defLang || "ja",
+          detailLevel: d.detailLevel || 2,
+          tags: d.tags || [],
+          cards: d.cards.map(c => ({ id: uid(), word: c.word || "", definition: c.definition || "" })),
+          cleared: false,
+          masteredIds: [],
+          favorited: false,
+          favCount: 0,
+        });
+        setDecks(prev => [...prev, newDeck]);
+        showToast(d.name + " をインポートしました");
+      } catch {
+        showToast("ファイルを読み込めませんでした", "err");
+      }
+    };
+    reader.readAsText(file);
+  }, [showToast]);
+
   const syncActive = useMemo(() => {
     return (id) => normalizeDeck(decks.find(d=>d.id===id) || activeDeck);
   }, [decks, activeDeck]);
@@ -163,19 +248,23 @@ export default function App() {
         onLibrary={()=>{setView("library");setMenuOpen(false);}}
         onGenerate={()=>{setView("generate");setMenuOpen(false);}}
         onNew={()=>{setEditDeck(null);setView("create");setMenuOpen(false);}}
+        onStats={()=>{setView("stats");setMenuOpen(false);}}
         activeView={view}
       />
       {view==="home"      && <HomeView decks={decks} onOpenDetail={openDetail}
                                onNew={()=>{setEditDeck(null);setView("create");}}
                                onGenerate={()=>setView("generate")}
                                onLibrary={()=>setView("library")}
+                               onStats={()=>setView("stats")}
                                onToggleFav={toggleFavorite}
                                onEdit={d=>{setEditDeck(d);setView("create");}}
                                onDelete={id=>{setDecks(p=>p.filter(d=>d.id!==id));showToast("削除しました");}}
                                onMenuClick={()=>setMenuOpen(true)}
                                onSaveGeneratedDeck={saveGeneratedDeck}
-                               onSaveAndStartFlash={saveAndStartFlash}/>}
-      {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)}/>}
+                               onSaveAndStartFlash={saveAndStartFlash}
+                               onImport={importDeck}/>}
+      {view==="stats"     && <StatsView decks={decks} onBack={goHome} onOpenDetail={openDetail} onMenuClick={()=>setMenuOpen(true)}/>}
+      {view==="library"   && <LibraryView onBack={goHome} onOpenDetail={openDetail} onToggleFav={togglePublicFavorite} onMenuClick={()=>setMenuOpen(true)} favoritedIds={publicFavIds}/>}
       {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
       {view==="detail"    && activeDeck && <DetailView deck={syncActive(activeDeck.id)} onBack={goHome}
@@ -188,7 +277,7 @@ export default function App() {
         trackEvent("review_card", { deck_id: activeDeck.id, card_count: syncActive(activeDeck.id).cards.length, mode: "flip" });
         setView("detail");
       }}/>}
-      {view==="quiz"      && activeDeck && <QuizView  deck={syncActive(activeDeck.id)} mode={quizMode} onBack={()=>setView("detail")} onCleared={markCleared} onUpdateStreaks={updateStreaks} showToast={showToast}/>}
+      {view==="quiz"      && activeDeck && <QuizView  deck={syncActive(activeDeck.id)} mode={quizMode} isTest={isTestMode} onBack={()=>setView("detail")} onCleared={markCleared} onUpdateStreaks={updateStreaks} showToast={showToast}/>}
       <FeedbackFab/>
     </div>
   );
