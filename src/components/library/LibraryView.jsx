@@ -1,21 +1,63 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { AppSidebar } from "../layout/AppSidebar.jsx";
 import { DeckCard } from "../home/DeckCard.jsx";
+import { fetchPublicDecks } from "../../api.js";
 
-export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick}) {
-  const [query,setQuery]=useState("");
-  const [activeTag,setActiveTag]=useState(null);
-  const allTags=[...new Set(decks.flatMap((deck)=>deck.tags||[]))].sort();
-  const filtered=decks.filter((deck)=>{
-    const q=query.toLowerCase().trim();
-    const matchesQuery =
-      !q ||
-      deck.name.toLowerCase().includes(q) ||
-      (deck.tags||[]).some((tag)=>tag.toLowerCase().includes(q));
-    const matchesTag = !activeTag || (deck.tags||[]).includes(activeTag);
-    return matchesQuery && matchesTag;
-  });
+export function LibraryView({ onBack, onOpenDetail, onToggleFav, onMenuClick, favoritedIds }) {
+  const [query, setQuery] = useState("");
+  const [activeTag, setActiveTag] = useState(null);
+  const [decks, setDecks] = useState([]);
+  const [allTags, setAllTags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const debounceRef = useRef(null);
+
+  // API からデッキを取得
+  const loadDecks = useCallback(async (q, tag) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { decks: fetched } = await fetchPublicDecks({ q: q || undefined, tag: tag || undefined });
+      setDecks(fetched);
+      // タグなしで全件取得した場合のみタグ一覧を更新
+      if (!q && !tag) {
+        const tags = [...new Set(fetched.flatMap((d) => d.tags || []))].sort();
+        setAllTags(tags);
+      }
+    } catch (e) {
+      console.error("公開デッキ取得エラー:", e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 初回読み込み
+  useEffect(() => {
+    loadDecks("", null);
+  }, [loadDecks]);
+
+  // 検索入力のデバウンス
+  const handleSearch = useCallback((value) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      loadDecks(value, activeTag);
+    }, 400);
+  }, [loadDecks, activeTag]);
+
+  // タグ切り替え
+  const handleTagClick = useCallback((tag) => {
+    setActiveTag(tag);
+    loadDecks(query, tag);
+  }, [loadDecks, query]);
+
+  // お気に入り状態をローカルに反映
+  const displayDecks = decks.map((d) => ({
+    ...d,
+    favorited: favoritedIds ? favoritedIds.has(d.publicId) : false,
+  }));
 
   return (
     <div className="page">
@@ -25,7 +67,7 @@ export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick})
         <AppSidebar
           active="library"
           onHome={onBack}
-          onLibrary={()=>{}}
+          onLibrary={() => {}}
         />
 
         <main className="shell-main">
@@ -38,21 +80,21 @@ export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick})
                 className="search-input"
                 placeholder="単語帳名やタグで検索"
                 value={query}
-                onChange={(e)=>setQuery(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
                 maxLength={100}
               />
             </div>
 
             {allTags.length > 0 && (
               <div className="tag-row">
-                <button className={`tag ${!activeTag ? "active" : ""}`} onClick={()=>setActiveTag(null)}>
+                <button className={`tag ${!activeTag ? "active" : ""}`} onClick={() => handleTagClick(null)}>
                   すべて
                 </button>
-                {allTags.map((tag)=>(
+                {allTags.map((tag) => (
                   <button
                     key={tag}
-                    className={`tag ${activeTag===tag ? "active" : ""}`}
-                    onClick={()=>setActiveTag(tag)}
+                    className={`tag ${activeTag === tag ? "active" : ""}`}
+                    onClick={() => handleTagClick(tag)}
                   >
                     {tag}
                   </button>
@@ -65,21 +107,32 @@ export function LibraryView({decks,onBack,onOpenDetail,onToggleFav,onMenuClick})
             <div className="section-head">
               <div>
                 <div className="section-kicker">検索結果</div>
-                <h2 className="section-heading">{filtered.length}件のセット</h2>
+                <h2 className="section-heading">
+                  {loading ? "読み込み中..." : `${displayDecks.length}件のセット`}
+                </h2>
               </div>
             </div>
 
+            {error && (
+              <p style={{ color: "var(--c-err)", padding: "1rem" }}>{error}</p>
+            )}
+
             <div className="set-feed">
-              {filtered.map((deck)=>(
+              {displayDecks.map((deck) => (
                 <DeckCard
                   key={deck.id}
                   deck={deck}
-                  onClick={()=>onOpenDetail(deck)}
-                  onFav={(e)=>{ e.stopPropagation(); onToggleFav(deck.id); }}
-                  onEdit={(e)=>e.stopPropagation()}
-                  onDelete={(e)=>e.stopPropagation()}
+                  onClick={() => onOpenDetail(deck)}
+                  onFav={(e) => { e.stopPropagation(); onToggleFav(deck); }}
+                  onEdit={(e) => e.stopPropagation()}
+                  onDelete={(e) => e.stopPropagation()}
                 />
               ))}
+              {!loading && !error && displayDecks.length === 0 && (
+                <p style={{ padding: "2rem 1rem", opacity: 0.6 }}>
+                  公開されたセットはまだありません。
+                </p>
+              )}
             </div>
           </section>
         </main>

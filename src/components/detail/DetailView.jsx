@@ -3,6 +3,31 @@ import { Navbar } from "../shared/Navbar.jsx";
 import { uid, getLangLabel } from "../../utils.js";
 import { aiSuggest } from "../../api.js";
 
+function exportDeck(deck) {
+  const exportData = {
+    format: "flash_auto_deck",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    deck: {
+      name: deck.name,
+      author: deck.author,
+      wordLang: deck.wordLang,
+      defLang: deck.defLang,
+      detailLevel: deck.detailLevel,
+      tags: deck.tags,
+      isPublic: deck.isPublic,
+      cards: deck.cards.map(c => ({ word: c.word, definition: c.definition })),
+    },
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (deck.name || "deck") + ".json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdateCard,onAddCard,onDeleteCard,showToast}) {
   const [editingId,setEditingId]=useState(null);
   const [editWord,setEditWord]=useState("");
@@ -128,6 +153,7 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
         right={(
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
             <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav} title={deck.favorited?"保存済み":"保存"}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+            <button className="nbtn" onClick={() => { exportDeck(deck); showToast("エクスポートしました"); }}>エクスポート</button>
             <button className="nbtn" onClick={onEdit}>単語帳編集</button>
             <button className="nbtn danger" onClick={onDelete}>削除</button>
           </div>
@@ -227,11 +253,11 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
               <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>テスト形式を選択</h3>
               <p style={{ margin: "0 0 16px", color: "var(--text3)", fontSize: 14 }}>全問正解すると単語帳をクリアできます。</p>
               <div style={{ display: "grid", gap: 10 }}>
-                <button className="mode-big-btn" style={{ "--mc": "#0ea5e9" }} onClick={() => { setTestSubMenu(false); onStartMode("quiz-choice"); }}>
+                <button className="mode-big-btn" style={{ "--mc": "#0ea5e9" }} onClick={() => { setTestSubMenu(false); onStartMode("test-choice"); }}>
                   <strong>選択式テスト</strong>
                   <span>4つの選択肢から正しい定義を選びます。</span>
                 </button>
-                <button className="mode-big-btn" style={{ "--mc": "#f97316" }} onClick={() => { setTestSubMenu(false); onStartMode("quiz-write"); }}>
+                <button className="mode-big-btn" style={{ "--mc": "#f97316" }} onClick={() => { setTestSubMenu(false); onStartMode("test-write"); }}>
                   <strong>記述式テスト</strong>
                   <span>定義を自分で書いて答えます。</span>
                 </button>

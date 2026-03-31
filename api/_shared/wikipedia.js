@@ -391,7 +391,7 @@ function cleanName(raw) {
   name = name.replace(/\{\{[^}]*\}\}/g, "");
 
   // 声優情報を除去: 「（声 - ○○）」「(CV: ○○)」等
-  name = name.replace(/[（(]\s*(?:声|CV|声優|Voice|voiced by)\s*[:：\-]?\s*[^）)]*[）)]/gi, "");
+  name = name.replace(/[（(]\s*(?:声|CV|声優|Voice|voiced by)\s*[:：-]?\s*[^）)]*[）)]/gi, "");
 
   // 読みがな除去: 「キャラ名（かな）」
   name = name.replace(/[（(][ぁ-んァ-ヶー、\s]+[）)]/g, "");

@@ -8,7 +8,7 @@ import { getAnonymousUserId, trackEvent } from "../../lib/tracking.js";
 import { fetchDeckFromCacheOrGenerate } from "../../api.js";
 import { uid } from "../../utils.js";
 
-export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash}) {
+export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash,onImport}) {
   const [filter,setFilter] = useState("all");
   const [quickTopic, setQuickTopic] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
@@ -16,6 +16,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
   const [quickError, setQuickError] = useState("");
   const [credits, setCredits] = useState(null);
   const appOpenRef = useRef(Date.now());
+  const importRef = useRef(null);
 
   const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎"];
 
@@ -118,6 +119,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
           onHome={()=>setFilter("all")}
           onMyLibrary={()=>{setFilter("all");setTimeout(()=>document.getElementById("my-set-section")?.scrollIntoView({behavior:"smooth"}),50);}}
           onLibrary={onLibrary}
+          onStats={onStats}
         />
 
         <main className="shell-main">
@@ -191,6 +193,8 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
             <div className="dashboard-actions">
               <button className="nbtn ghost" onClick={onNew}>手動で作成する</button>
               <button className="nbtn ghost" onClick={onLibrary}>公開ライブラリを見る</button>
+              <button className="nbtn ghost" onClick={() => importRef.current?.click()}>インポート</button>
+              <input ref={importRef} type="file" accept=".json" style={{ display:"none" }} onChange={e => { if (e.target.files[0]) { onImport(e.target.files[0]); e.target.value = ""; } }} />
             </div>
             <div className="stats-row">
               <div className="stat-chip"><strong>{decks.length}</strong><span>セット</span></div>
