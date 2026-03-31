@@ -729,7 +729,9 @@ async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, must
   const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
   const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords, searchedNames, searchedCharacters });
   const maxTokens = detailLevel === 3 ? 6000 : 4000;
-  const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
+  // Wikipedia検索が成功した場合、LLMの役割は「整形・要約」に限定されるため
+  // 有料のGeminiではなく無料のGroqで十分
+  const generateLLM = _callGenerateLLM ?? (searchedCharacters ? requestGroqChat : getDeckGenerationLLM());
   const raw = await generateLLM({ prompt, maxTokens, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
   const rawCards = parsed.cards || [];
@@ -811,7 +813,8 @@ async function generateContinuationCards({ topic, wordLang, defLang, detailLevel
 
   const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
   const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords, searchedNames, searchedCharacters });
-  const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
+  // Wikipedia検索成功時はGroqで十分（整形・要約のみ）
+  const generateLLM = _callGenerateLLM ?? (searchedCharacters ? requestGroqChat : getDeckGenerationLLM());
   const raw = await generateLLM({ prompt, maxTokens: 2500, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
   const rawCards = parsed.cards || [];
