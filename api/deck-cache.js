@@ -3,6 +3,7 @@ import { requestGeminiChat } from "./_shared/gemini.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
 import { checkRateLimit, getClientIp } from "./_shared/rate-limit.js";
+import { fetchCharacterData } from "./_shared/wikipedia.js";
 
 /**
  * デッキ生成用LLMを選択する。
@@ -395,6 +396,36 @@ function filterJobDescriptionCards(cards, topic) {
   return filtered;
 }
 
+/**
+ * LLM生成後の定義文ポストプロセス。
+ * 「のキャラクター。」「をモチーフにした…」のように助詞で始まる不完全な文を修正する。
+ * LLMが「wordを定義に含めるな」指示に従い名前を削除した結果、助詞が残るケースを救済。
+ */
+function fixBrokenDefinitionStarts(cards) {
+  return cards.map(card => {
+    let def = card.definition;
+    if (!def) return card;
+    const original = def;
+
+    // 「のキャラクター。」「のキャラクター、」「のキャラクターで」等で始まる場合 → 除去
+    def = def.replace(/^のキャラクター[。．、,でが]\s*/, "");
+
+    // 「をモチーフにした(キャラクター)。」で始まる場合 → 除去
+    def = def.replace(/^をモチーフにした(?:キャラクター)?[。．、,]\s*/, "");
+
+    // 「の(キャラクター|登場人物|マスコット)」で始まる場合 → 除去
+    def = def.replace(/^[のをはが](?:キャラクター|登場人物|マスコット)[。．、,でが]*\s*/, "");
+
+    // 「(作品名)のキャラクター。」で始まる場合 → 除去
+    def = def.replace(/^[^\s。、]{1,20}のキャラクター[。．、,]\s*/, "");
+
+    if (def !== original && def.length > 0) {
+      return { ...card, definition: def };
+    }
+    return card;
+  });
+}
+
 const DECK_SYSTEM_PROMPT = [
   "You are a factual flashcard generator.",
   "CRITICAL RULES:",
@@ -407,7 +438,7 @@ const DECK_SYSTEM_PROMPT = [
   "- Each definition must describe the specific item in the 'word' field — not the broader topic, and not the item's occupation alone.",
 ].join("\n");
 
-function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords }) {
+function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords, searchedNames, searchedCharacters }) {
   const detailInstructions = detailLevel === 1
     ? "Each definition should be one short sentence."
     : detailLevel === 2
@@ -438,6 +469,34 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustInclude
       ].filter(Boolean).join("\n")
     : null;
 
+  // 検索先行パイプライン: Wikipedia から取得したキャラクター情報がある場合、
+  // LLM には名前リスト+参考情報を渡し、「この情報をもとに定義を書け」と指示する。
+  // LLM が勝手に名前を追加したり、事実を捏造することを防ぐ。
+  const hasSearchData = isCharacter && searchedCharacters && searchedCharacters.length > 0;
+  const searchedNamesInstruction = hasSearchData
+    ? [
+        "CONFIRMED CHARACTER DATA (from a trusted source — Wikipedia):",
+        ...searchedCharacters.slice(0, 20).map(c =>
+          c.description
+            ? `- ${c.name}: ${c.description}`
+            : `- ${c.name}`
+        ),
+        "",
+        "CRITICAL RULES:",
+        "- You MUST ONLY use character names from the list above as 'word' values.",
+        "- Do NOT add, invent, or guess any names that are not in this list.",
+        "- Base each definition ONLY on the reference information provided above. Do NOT add facts, traits, or details that are not in the reference.",
+        "- If the reference information for a character is empty or insufficient, write a brief, conservative definition based only on what is provided.",
+        "- Select the most important characters from this list (up to 15) and write a definition for each.",
+      ].join("\n")
+    : (isCharacter && searchedNames && searchedNames.length > 0)
+      ? [
+          `CONFIRMED CHARACTER NAMES (from a trusted source): ${searchedNames.join(", ")}`,
+          "CRITICAL: You MUST ONLY use names from the list above as 'word' values. Do NOT add, invent, or guess any names that are not in this list.",
+          "Select the most important characters from this list (up to 15) and write a definition for each.",
+        ].join("\n")
+      : null;
+
   // キャラクタートピックと通常テーマで定義文の指示を分ける
   const definitionInstruction = isCharacter
     ? buildCharacterDefinitionInstruction(detailLevel)
@@ -446,14 +505,22 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustInclude
   return [
     `Create a study flashcard deck about: ${topic}`,
     "GOAL: Output ONLY items that genuinely satisfy this topic's criteria. Do NOT guess or pad to meet a number.",
-    "Card count: up to 15. Return as many as you are confident about — even if that is fewer than 10. 3 correct cards is better than 10 guessed cards.",
+    searchedNamesInstruction
+      ? "Card count: up to 15. Use ONLY the confirmed names provided below."
+      : "Card count: up to 15. Return as many as you are confident about — even if that is fewer than 10. 3 correct cards is better than 10 guessed cards.",
+    searchedNamesInstruction,
     characterTopicInstruction,
-    "Each card's 'word' field must be a specific, real item that directly belongs to the topic.",
+    searchedNamesInstruction
+      ? null
+      : "Each card's 'word' field must be a specific, real item that directly belongs to the topic.",
     isCharacter
       ? null
       : "If the topic is about a field of study, list key terms. If the topic is about places, list actual place names.",
     "Do NOT include generic peripheral words like 'merchandise', 'fan art', 'collaboration', 'pop culture', or 'character goods' — only include items that ARE the topic's core content.",
     "CRITICAL: The definition must NEVER start with or contain the word/term itself. Do NOT write '〜とは', '〜は', 'X is', 'X refers to', or any variation that includes the word. Write as if the word is hidden — define the concept without naming it.",
+    isCharacter
+      ? "IMPORTANT: When writing character definitions, do NOT start with 'のキャラクター' or similar fragments that assume the character name precedes it. Each definition must be a complete, self-contained sentence. Good: '物語の主人公。小さな白い生き物で...' Bad: 'のキャラクター。元気で...' — the definition must make grammatical sense on its own."
+      : null,
     mustIncludeInstruction,
     wordLangInstruction,
     `Definition language: ${defLang}`,
@@ -462,7 +529,7 @@ function buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustInclude
   ].filter(Boolean).join("\n");
 }
 
-function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords }) {
+function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords, searchedNames, searchedCharacters }) {
   const detailInstructions = detailLevel === 1
     ? "Each definition should be one short sentence."
     : detailLevel === 2
@@ -478,6 +545,33 @@ function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existi
     ? buildCharacterDefinitionInstruction(detailLevel)
     : detailInstructions;
 
+  // 検索先行: 既存単語を除外した残りの候補だけをLLMに渡す
+  const existingSet = new Set(existingWords.map(w => w.toLowerCase()));
+  const remainingCharacters = (isCharacter && searchedCharacters && searchedCharacters.length > 0)
+    ? searchedCharacters.filter(c => !existingSet.has(c.name.toLowerCase()))
+    : null;
+  const remainingNames = (isCharacter && searchedNames && searchedNames.length > 0)
+    ? searchedNames.filter(n => !existingSet.has(n.toLowerCase()))
+    : null;
+
+  const searchedNamesContinuationInstruction = (remainingCharacters && remainingCharacters.length > 0)
+    ? [
+        "REMAINING CONFIRMED CHARACTER DATA (from Wikipedia):",
+        ...remainingCharacters.slice(0, 20).map(c =>
+          c.description
+            ? `- ${c.name}: ${c.description}`
+            : `- ${c.name}`
+        ),
+        "",
+        "CRITICAL: You MUST ONLY use names from the list above. Base definitions ONLY on the reference information provided.",
+      ].join("\n")
+    : (remainingNames && remainingNames.length > 0)
+      ? [
+          `REMAINING CONFIRMED CHARACTER NAMES (from a trusted source): ${remainingNames.join(", ")}`,
+          "CRITICAL: You MUST ONLY use names from the list above as 'word' values. Do NOT add, invent, or guess any names not in this list.",
+        ].join("\n")
+      : null;
+
   const characterContinuationInstruction = isCharacter
     ? [
         "Each 'word' must be a PROPER NAME (given name, nickname, or alias) of a real named character from this specific fictional work.",
@@ -490,11 +584,19 @@ function buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existi
     `Continue a study flashcard deck about: ${topic}`,
     `Already generated words: ${existingWords.join(", ")}`,
     "GOAL: Output ONLY additional items that genuinely belong to this topic. Do NOT invent items to reach a count.",
-    "Generate up to 10 additional cards. Return fewer if you are not confident. Never guess or fabricate.",
+    searchedNamesContinuationInstruction
+      ? "Generate cards for the remaining confirmed names below. Do NOT add any names outside this list."
+      : "Generate up to 10 additional cards. Return fewer if you are not confident. Never guess or fabricate.",
     "Every new card must be a new term and must not duplicate or paraphrase any existing word.",
-    "Each card's 'word' must be a specific, real item that directly belongs to the topic — no generic peripheral concepts.",
+    searchedNamesContinuationInstruction,
+    searchedNamesContinuationInstruction
+      ? null
+      : "Each card's 'word' must be a specific, real item that directly belongs to the topic — no generic peripheral concepts.",
     characterContinuationInstruction,
     "CRITICAL: The definition must NEVER start with or contain the word/term itself. Do NOT write '〜とは', '〜は', 'X is', 'X refers to', or any variation that includes the word. Write as if the word is hidden — define the concept without naming it.",
+    isCharacter
+      ? "IMPORTANT: When writing character definitions, do NOT start with 'のキャラクター' or similar fragments that assume the character name precedes it. Each definition must be a complete, self-contained sentence. Good: '物語の主人公。小さな白い生き物で...' Bad: 'のキャラクター。元気で...' — the definition must make grammatical sense on its own."
+      : null,
     wordLangInstruction,
     `Definition language: ${defLang}`,
     definitionInstruction,
@@ -601,31 +703,65 @@ async function fetchCachedDeckById(supabase, cacheId) {
   return data?.[0] || null;
 }
 
-async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords, _callVerifyLLM, _callGenerateLLM }) {
-  const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords });
+async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords, _callVerifyLLM, _callGenerateLLM, _fetchCharacterData }) {
+  // 検索先行パイプライン: キャラクター系テーマのとき Wikipedia からキャラクター情報を取得
+  let searchedCharacters = null; // Array<{name, description}> or null
+  if (isCharacterTopic(topic)) {
+    const workTitle = extractWorkTitle(topic) || topic;
+    const fetchData = _fetchCharacterData ?? fetchCharacterData;
+    try {
+      searchedCharacters = await fetchData(workTitle);
+      if (searchedCharacters.length > 0) {
+        console.log(`[deck-cache] Wikipedia search-first: found ${searchedCharacters.length} characters with descriptions for "${workTitle}"`);
+      } else {
+        console.log(`[deck-cache] Wikipedia search-first: no data found for "${workTitle}", falling back to LLM generation`);
+        searchedCharacters = null;
+      }
+    } catch (err) {
+      console.warn(`[deck-cache] Wikipedia search-first failed for "${workTitle}", falling back: ${err.message}`);
+      searchedCharacters = null;
+    }
+  }
+
+  const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
+  const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel, mustIncludeWords, searchedNames, searchedCharacters });
   const maxTokens = detailLevel === 3 ? 6000 : 4000;
   const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
   const raw = await generateLLM({ prompt, maxTokens, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
-  // 内部バリデーション（3層）:
-  //   1. 役職語・職業語のword → filterCharacterCards
-  //   2. 一般概念語・周辺語のword → filterGenericConceptCards
-  //   3. 職種説明のみの定義文 → filterJobDescriptionCards
   const rawCards = parsed.cards || [];
-  const afterRoleFilter = filterCharacterCards(rawCards, topic);
-  const afterConceptFilter = filterGenericConceptCards(afterRoleFilter, topic);
-  const internalFiltered = filterJobDescriptionCards(afterConceptFilter, topic);
+  const usedSearchFirst = searchedNames && searchedNames.length > 0;
 
-  // 外部照合ゲート: キャラクタートピックかつ候補が残っている場合のみ実行
-  let finalCards = internalFiltered;
-  if (isCharacterTopic(topic) && internalFiltered.length > 0) {
-    const workTitle = extractWorkTitle(topic) || topic;
-    const callLLM = _callVerifyLLM ?? getVerificationLLM();
-    finalCards = await verifyCharacterCards(internalFiltered, workTitle, { callLLM });
+  let finalCards;
+  if (usedSearchFirst && isCharacterTopic(topic)) {
+    // === Wikipedia検索先行ルート ===
+    // LLMの指示遵守に頼らず、Wikipediaの実在名リストとハード突き合わせする。
+    // LLM検証は不要（Wikipedia由来の名前が正解データ）。
+    const confirmedSet = new Set(searchedNames.map(n => n.toLowerCase().trim()));
+    const matched = rawCards.filter(card => confirmedSet.has(card.word.toLowerCase().trim()));
+    const rejected = rawCards.length - matched.length;
+    if (rejected > 0) {
+      console.log(`[deck-cache] Wikipedia hard filter: ${matched.length}/${rawCards.length} cards matched (${rejected} hallucinated names removed)`);
+    }
+    // 内部フィルタも通す（職業説明文の定義など）
+    const afterJobFilter = filterJobDescriptionCards(matched, topic);
+    // 定義文の先頭が「のキャラクター。」等の不完全な形になっていたら修正
+    finalCards = fixBrokenDefinitionStarts(afterJobFilter);
+  } else {
+    // === 従来ルート（Wikipedia名なし） ===
+    // 3層内部フィルタ + LLM外部検証
+    const afterRoleFilter = filterCharacterCards(rawCards, topic);
+    const afterConceptFilter = filterGenericConceptCards(afterRoleFilter, topic);
+    const internalFiltered = filterJobDescriptionCards(afterConceptFilter, topic);
+
+    finalCards = internalFiltered;
+    if (isCharacterTopic(topic) && internalFiltered.length > 0) {
+      const workTitle = extractWorkTitle(topic) || topic;
+      const callLLM = _callVerifyLLM ?? getVerificationLLM();
+      finalCards = await verifyCharacterCards(internalFiltered, workTitle, { callLLM });
+    }
+    checkCharacterDeckRatio(rawCards.length, finalCards.length, topic);
   }
-
-  // 不正カード比率チェック: raw枚数基準で最終残存が少なすぎたら無効デッキ
-  checkCharacterDeckRatio(rawCards.length, finalCards.length, topic);
 
   return {
     deckName: String(parsed.deckName || "").trim() || "AI生成単語帳",
@@ -634,24 +770,55 @@ async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, must
   };
 }
 
-async function generateContinuationCards({ topic, wordLang, defLang, detailLevel, existingWords, _callVerifyLLM, _callGenerateLLM }) {
-  const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords });
+async function generateContinuationCards({ topic, wordLang, defLang, detailLevel, existingWords, _callVerifyLLM, _callGenerateLLM, _fetchCharacterData }) {
+  // 検索先行パイプライン（continuation でも同様に Wikipedia 検索を行う）
+  let searchedCharacters = null;
+  if (isCharacterTopic(topic)) {
+    const workTitle = extractWorkTitle(topic) || topic;
+    const fetchData = _fetchCharacterData ?? fetchCharacterData;
+    try {
+      searchedCharacters = await fetchData(workTitle);
+      if (searchedCharacters.length > 0) {
+        console.log(`[deck-cache] Wikipedia search-first (continue): found ${searchedCharacters.length} characters for "${workTitle}"`);
+      } else {
+        searchedCharacters = null;
+      }
+    } catch (err) {
+      console.warn(`[deck-cache] Wikipedia search-first (continue) failed for "${workTitle}": ${err.message}`);
+      searchedCharacters = null;
+    }
+  }
+
+  const searchedNames = searchedCharacters ? searchedCharacters.map(c => c.name) : null;
+  const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords, searchedNames, searchedCharacters });
   const generateLLM = _callGenerateLLM ?? getDeckGenerationLLM();
   const raw = await generateLLM({ prompt, maxTokens: 2500, systemPrompt: DECK_SYSTEM_PROMPT, temperature: 0.3 });
   const parsed = parseDeckPayload(raw);
   const rawCards = parsed.cards || [];
-  const afterRoleFilter = filterCharacterCards(rawCards, topic);
-  const afterConceptFilter = filterGenericConceptCards(afterRoleFilter, topic);
-  const internalFiltered = filterJobDescriptionCards(afterConceptFilter, topic);
+  const usedSearchFirst = searchedNames && searchedNames.length > 0;
 
-  let finalCards = internalFiltered;
-  if (isCharacterTopic(topic) && internalFiltered.length > 0) {
-    const workTitle = extractWorkTitle(topic) || topic;
-    const callLLM = _callVerifyLLM ?? getVerificationLLM();
-    finalCards = await verifyCharacterCards(internalFiltered, workTitle, { callLLM });
+  let finalCards;
+  if (usedSearchFirst && isCharacterTopic(topic)) {
+    const confirmedSet = new Set(searchedNames.map(n => n.toLowerCase().trim()));
+    const matched = rawCards.filter(card => confirmedSet.has(card.word.toLowerCase().trim()));
+    const rejected = rawCards.length - matched.length;
+    if (rejected > 0) {
+      console.log(`[deck-cache] Wikipedia hard filter (continue): ${matched.length}/${rawCards.length} cards matched (${rejected} removed)`);
+    }
+    finalCards = fixBrokenDefinitionStarts(filterJobDescriptionCards(matched, topic));
+  } else {
+    const afterRoleFilter = filterCharacterCards(rawCards, topic);
+    const afterConceptFilter = filterGenericConceptCards(afterRoleFilter, topic);
+    const internalFiltered = filterJobDescriptionCards(afterConceptFilter, topic);
+
+    finalCards = internalFiltered;
+    if (isCharacterTopic(topic) && internalFiltered.length > 0) {
+      const workTitle = extractWorkTitle(topic) || topic;
+      const callLLM = _callVerifyLLM ?? getVerificationLLM();
+      finalCards = await verifyCharacterCards(internalFiltered, workTitle, { callLLM });
+    }
+    checkCharacterDeckRatio(rawCards.length, finalCards.length, topic);
   }
-
-  checkCharacterDeckRatio(rawCards.length, finalCards.length, topic);
   return sanitizeCards(finalCards, 3, 10, existingWords);
 }
 
@@ -863,4 +1030,6 @@ export {
   VERIFICATION_SYSTEM_PROMPT,
   getDeckGenerationLLM,
   getVerificationLLM,
+  generateInitialDeck,
+  generateContinuationCards,
 };

@@ -248,7 +248,7 @@ async function handleTrackProxy(req, res, supabaseUrl, supabaseKey) {
   sendJson(res, 200, { ok: true })
 }
 
-async function handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel) {
+async function handleDeckCacheProxy(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -264,24 +264,24 @@ async function handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel
   const wordLang = normalizeLanguageValue(body.wordLang, 'technical')
   const defLang = normalizeLanguageValue(body.defLang)
   const detailLevel = Number(body.detailLevel || 2)
+  const mustIncludeWords = String(body.mustIncludeWords || '').trim()
 
   if (!topic) { sendJson(res, 400, { error: 'topic is required' }); return }
 
   try {
-    if (action === 'initial') {
-      const prompt = buildInitialPrompt({ topic, wordLang, defLang, detailLevel })
-      const raw = await requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, 4000)
-      const parsed = parseDeckPayload(raw)
-      const cards = sanitizeCards(parsed.cards, 10, 15)
+    // 本番と同じ api/deck-cache.js の生成ロジックを使用
+    const { generateInitialDeck, generateContinuationCards } = await import('./api/deck-cache.js')
 
+    if (action === 'initial') {
+      const generated = await generateInitialDeck({ topic, wordLang, defLang, detailLevel, mustIncludeWords })
       sendJson(res, 200, {
         source: 'generated',
         remainingCredits: null,
         cacheId: null,
         deck: {
-          deckName: String(parsed.deckName || '').trim() || 'AI生成単語帳',
-          tags: Array.isArray(parsed.tags) ? parsed.tags.filter(Boolean).slice(0, 10) : [],
-          cards,
+          deckName: generated.deckName,
+          tags: generated.tags,
+          cards: generated.cards,
           wordLang,
           defLang,
           detailLevel,
@@ -295,23 +295,23 @@ async function handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel
         ? body.existingWords.map((w) => String(w || '').trim()).filter(Boolean)
         : []
 
-      const prompt = buildContinuationPrompt({ topic, wordLang, defLang, detailLevel, existingWords })
-      const raw = await requestAIChatDirect(apiKey, ollamaBaseUrl, ollamaModel, prompt, 2500)
-      const parsed = parseDeckPayload(raw)
-      const cards = sanitizeCards(parsed.cards, 5, 10, existingWords)
+      const continuationCards = await generateContinuationCards({
+        topic, wordLang, defLang, detailLevel, existingWords,
+      })
 
       sendJson(res, 200, {
         source: 'continued',
-        addedCount: cards.length,
+        addedCount: continuationCards.length,
         remainingCredits: null,
         cacheId: null,
-        deck: { cards },
+        deck: { cards: continuationCards },
       })
       return
     }
 
     sendJson(res, 400, { error: 'Unsupported action' })
   } catch (error) {
+    console.error('[deck-cache proxy] error:', error instanceof Error ? error.message : error)
     sendJson(res, 500, { error: error instanceof Error ? error.message : 'Deck generation failed' })
   }
 }
@@ -467,7 +467,21 @@ export default defineConfig(({ mode }) => {
   const supabaseUrl = env.SUPABASE_URL || process.env.SUPABASE_URL || ''
   const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+  // .env.local の値を process.env にも反映（api/deck-cache.js が process.env から読むため）
+  const envKeys = ['GEMINI_API_KEY', 'GROQ_API_KEY', 'OLLAMA_BASE_URL', 'OLLAMA_MODEL']
+  for (const key of envKeys) {
+    if (env[key] && !process.env[key]) {
+      process.env[key] = env[key]
+    }
+  }
+
   return {
+    test: {
+      exclude: [
+        ".claude/**",
+        "node_modules/**",
+      ],
+    },
     plugins: [
       react(),
       {
@@ -480,7 +494,7 @@ export default defineConfig(({ mode }) => {
             }
 
             if (req.url?.startsWith('/api/deck-cache')) {
-              await handleDeckCacheProxy(req, res, apiKey, ollamaBaseUrl, ollamaModel)
+              await handleDeckCacheProxy(req, res)
               return
             }
 
