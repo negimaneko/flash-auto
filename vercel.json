@@ -12,7 +12,11 @@
     },
     {
       "path": "/api/post-x",
-      "schedule": "50 14 * * *"
+      "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/daily-report",
+      "schedule": "53 13 * * *"
     }
   ]
 }
