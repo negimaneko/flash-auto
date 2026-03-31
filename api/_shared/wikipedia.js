@@ -82,7 +82,7 @@ async function searchPageTitle(query, apiBase) {
 
   const res = await fetch(`${apiBase}?${params}`, {
     headers: { "User-Agent": "FlashAutoApp/1.0 (flashcard study app)" },
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(3000),
   });
 
   if (!res.ok) return null;
@@ -116,7 +116,7 @@ async function fetchPageWikitext(pageTitle, apiBase) {
 
   const res = await fetch(`${apiBase}?${params}`, {
     headers: { "User-Agent": "FlashAutoApp/1.0 (flashcard study app)" },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(5000),
   });
 
   if (!res.ok) return null;

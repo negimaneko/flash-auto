@@ -39,6 +39,7 @@ export async function requestGeminiChat({ prompt, maxTokens = 1024, systemPrompt
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   const data = await response.json();

@@ -70,7 +70,7 @@ export async function callAI(prompt, maxTokens = 1024) {
 
 export async function fetchDeckFromCacheOrGenerate(payload) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
   let response;
   try {
     response = await fetch("/api/deck-cache", {
@@ -82,7 +82,7 @@ export async function fetchDeckFromCacheOrGenerate(payload) {
   } catch (e) {
     clearTimeout(timeoutId);
     if (e && e.name === "AbortError") {
-      throw new Error("単語帳の生成がタイムアウトしました（30秒）。もう一度お試しください。");
+      throw new Error("単語帳の生成がタイムアウトしました。もう一度お試しください。");
     }
     throw e;
   }

@@ -5,6 +5,9 @@ import { handlePreflight, setCors } from "./_shared/cors.js";
 import { checkRateLimit, getClientIp } from "./_shared/rate-limit.js";
 import { fetchCharacterData } from "./_shared/wikipedia.js";
 
+// Vercel Serverless の実行時間上限を60秒に設定（Hobbyプランのデフォルト10秒では不足）
+export const config = { maxDuration: 60 };
+
 /**
  * デッキ生成用LLMを選択する。
  * GEMINI_API_KEY が設定されていれば Gemini を使い、なければ従来通り Groq を使う。
@@ -99,7 +102,7 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
     .slice(0, maxCards);
 
   if (sanitized.length < minCards) {
-    throw new Error("AI returned an invalid deck.");
+    throw new Error("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   }
 
   return sanitized;
@@ -281,7 +284,7 @@ function checkCharacterDeckRatio(rawCount, validCount, topic) {
     console.warn(
       `[deck-cache] Rejected deck: only ${validCount}/${rawCount} cards (${Math.round(ratio * 100)}%) passed validation for topic "${topic}"`
     );
-    throw new Error("AI returned an invalid deck.");
+    throw new Error("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   }
 }
 
