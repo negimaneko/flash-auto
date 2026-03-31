@@ -91,7 +91,9 @@ export async function fetchDeckFromCacheOrGenerate(payload) {
   const result = isJson ? await response.json() : { error: await response.text() };
 
   if (!response.ok) {
-    throw new Error(result.error || "単語帳の取得に失敗しました。");
+    const err = new Error(result.error || "単語帳の取得に失敗しました。");
+    if (result.credits) err.credits = result.credits;
+    throw err;
   }
 
   return result;

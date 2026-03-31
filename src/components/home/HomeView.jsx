@@ -14,6 +14,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
   const [quickLoading, setQuickLoading] = useState(false);
   const [quickResult, setQuickResult] = useState(null);
   const [quickError, setQuickError] = useState("");
+  const [credits, setCredits] = useState(null);
   const appOpenRef = useRef(Date.now());
 
   const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎"];
@@ -35,6 +36,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
         detailLevel: 2,
         userId,
       });
+      if (result.credits) setCredits(result.credits);
       const cards = (result.deck?.cards || []).map(card => ({ id: uid(), word: card.word, definition: card.definition }));
       setQuickResult({
         id: "gen-" + uid(),
@@ -63,6 +65,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
         source: "home_quick_generate",
       });
     } catch (e) {
+      if (e.credits) setCredits(e.credits);
       const message = e instanceof Error ? e.message : "生成に失敗しました。";
       setQuickError(message);
       trackEvent("generate_theme_deck", {
@@ -144,7 +147,14 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onToggle
                   {quickLoading ? "生成中..." : "✨ 無料で単語帳を作る"}
                 </button>
               </div>
-              {quickTopic.length > 0 && <div style={{ display:"flex", justifyContent:"flex-end", marginTop:2 }}><CharCount value={quickTopic} max={LIMITS.TOPIC} /></div>}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:2 }}>
+                {credits ? (
+                  <span style={{ color: credits.limit - credits.used <= 2 ? "var(--red)" : "var(--text3)", fontSize: 13 }}>
+                    今日の残り：{credits.limit - credits.used} / {credits.limit}回
+                  </span>
+                ) : <span />}
+                {quickTopic.length > 0 && <CharCount value={quickTopic} max={LIMITS.TOPIC} />}
+              </div>
               <div className="quick-gen-samples">
                 {QUICK_SAMPLES.map(s => (
                   <button key={s} className="sample-chip" onClick={() => setQuickTopic(s)} disabled={quickLoading}>{s}</button>
