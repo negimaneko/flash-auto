@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import "./App.css";
 import { getAnonymousUserId, trackEvent, isNewUser } from "./lib/tracking.js";
-import { AI_GENERATE_DAILY_LIMIT, SPLASH_DURATION_MS } from "./constants.js";
+import { SPLASH_DURATION_MS } from "./constants.js";
 import { SEED_DECKS } from "./data.js";
 import { normalizeDeck, normalizeDecks, uid } from "./utils.js";
 
@@ -41,7 +41,6 @@ export default function App() {
   const [quizMode, setQuizMode] = useState("choice");
   const [toast, setToast] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
-  const [appCredits, setAppCredits] = useState(AI_GENERATE_DAILY_LIMIT);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -159,7 +158,6 @@ export default function App() {
     <div className="app">
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
       <MobileDrawer open={menuOpen} onClose={()=>setMenuOpen(false)}
-        credits={appCredits}
         onHome={()=>{goHome();setMenuOpen(false);}}
         onMyLibrary={()=>{goHome();setMenuOpen(false);setTimeout(()=>document.getElementById("my-set-section")?.scrollIntoView({behavior:"smooth"}),100);}}
         onLibrary={()=>{setView("library");setMenuOpen(false);}}
@@ -167,7 +165,7 @@ export default function App() {
         onNew={()=>{setEditDeck(null);setView("create");setMenuOpen(false);}}
         activeView={view}
       />
-      {view==="home"      && <HomeView decks={decks} credits={appCredits} onOpenDetail={openDetail}
+      {view==="home"      && <HomeView decks={decks} onOpenDetail={openDetail}
                                onNew={()=>{setEditDeck(null);setView("create");}}
                                onGenerate={()=>setView("generate")}
                                onLibrary={()=>setView("library")}
@@ -177,8 +175,8 @@ export default function App() {
                                onMenuClick={()=>setMenuOpen(true)}
                                onSaveGeneratedDeck={saveGeneratedDeck}
                                onSaveAndStartFlash={saveAndStartFlash}/>}
-      {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)} credits={appCredits}/>}
-      {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast} onCreditsUpdate={setAppCredits}/>}
+      {view==="library"   && <LibraryView decks={decks.filter(d=>d.isPublic)} onBack={goHome} onOpenDetail={openDetail} onToggleFav={toggleFavorite} onMenuClick={()=>setMenuOpen(true)}/>}
+      {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
       {view==="detail"    && activeDeck && <DetailView deck={syncActive(activeDeck.id)} onBack={goHome}
                                onStartMode={startMode}
