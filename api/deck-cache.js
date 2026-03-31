@@ -746,7 +746,24 @@ async function generateInitialDeck({ topic, wordLang, defLang, detailLevel, must
     // 内部フィルタも通す（職業説明文の定義など）
     const afterJobFilter = filterJobDescriptionCards(matched, topic);
     // 定義文の先頭が「のキャラクター。」等の不完全な形になっていたら修正
-    finalCards = fixBrokenDefinitionStarts(afterJobFilter);
+    let filteredCards = fixBrokenDefinitionStarts(afterJobFilter);
+
+    // フォールバック: LLMの出力が Wikipedia 名と十分にマッチしなかった場合、
+    // Wikipedia データから直接カードを構築する。
+    if (filteredCards.length < 5 && searchedCharacters && searchedCharacters.length >= 5) {
+      console.log(`[deck-cache] LLM output insufficient (${filteredCards.length} cards), building cards directly from Wikipedia data`);
+      const matchedNames = new Set(filteredCards.map(c => c.word.toLowerCase().trim()));
+      const wikiCards = searchedCharacters
+        .filter(c => c.description && !matchedNames.has(c.name.toLowerCase().trim()))
+        .map(c => ({
+          word: c.name,
+          definition: stripWordFromDefinition(c.name, c.description),
+        }))
+        .slice(0, 15 - filteredCards.length);
+      filteredCards = [...filteredCards, ...wikiCards];
+      console.log(`[deck-cache] After Wikipedia fallback: ${filteredCards.length} cards total`);
+    }
+    finalCards = filteredCards;
   } else {
     // === 従来ルート（Wikipedia名なし） ===
     // 3層内部フィルタ + LLM外部検証
