@@ -1,3 +1,4 @@
+import { Trophy } from "lucide-react";
 import { getDeckTheme, getLangLabel } from "../../utils.js";
 
 export function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
@@ -11,7 +12,7 @@ export function DeckCard({deck,onClick,onFav,onEdit,onDelete}) {
         <div className="study-set-icon">{theme.icon}</div>
         <div className="study-set-badges">
           {deck.aiGenerated && <span className="study-badge">AI</span>}
-          {deck.cleared && <span className="study-badge cleared-badge">{"\uD83C\uDFC6"} クリア</span>}
+          {deck.cleared && <span className="study-badge cleared-badge"><Trophy size={14} /> クリア</span>}
         </div>
       </div>
       <div className="study-set-content">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { uid, getLangLabel } from "../../utils.js";
 import { aiSuggest } from "../../api.js";
@@ -315,8 +316,8 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
                       <div className="term-value">{card.definition}</div>
                     </div>
                     <div className="term-actions">
-                      <button className="nbtn ghost icon-btn" onClick={()=>startEdit(card)} title="編集">&#9998;</button>
-                      <button className="nbtn danger icon-btn" onClick={()=>removeCard(card)} title="削除">&#128465;</button>
+                      <button className="nbtn ghost icon-btn" onClick={()=>startEdit(card)} title="編集"><Pencil size={16} /></button>
+                      <button className="nbtn danger icon-btn" onClick={()=>removeCard(card)} title="削除"><Trash2 size={16} /></button>
                     </div>
                   </>
                 )}

@@ -1,11 +1,12 @@
+import { Home, BookOpen, Globe, BarChart3, MessageCircle } from "lucide-react";
 import { FEEDBACK_FORM_URL } from "../shared/FeedbackFab.jsx";
 
 export function AppSidebar({active,onHome,onMyLibrary,onLibrary,onStats}) {
   const items = [
-    { id: "home", label: "ホーム", icon: "🏠", action: onHome },
-    { id: "my-library", label: "マイセット", icon: "📚", desc: "作成した単語帳", action: onMyLibrary || onHome },
-    { id: "library", label: "公開ライブラリ", icon: "🌐", action: onLibrary },
-    { id: "stats", label: "学習統計", icon: "📊", desc: "進捗を確認", action: onStats },
+    { id: "home", label: "ホーム", icon: <Home size={18} />, action: onHome },
+    { id: "my-library", label: "マイセット", icon: <BookOpen size={18} />, desc: "作成した単語帳", action: onMyLibrary || onHome },
+    { id: "library", label: "公開ライブラリ", icon: <Globe size={18} />, action: onLibrary },
+    { id: "stats", label: "学習統計", icon: <BarChart3 size={18} />, desc: "進捗を確認", action: onStats },
   ].filter((item)=>typeof item.action === "function");
 
   return (
@@ -36,7 +37,7 @@ export function AppSidebar({active,onHome,onMyLibrary,onLibrary,onStats}) {
       </div>
 
       <a className="sidebar-feedback" href={FEEDBACK_FORM_URL} target="_blank" rel="noopener noreferrer">
-        💬 ご意見・不具合報告
+        <MessageCircle size={16} /> ご意見・不具合報告
       </a>
     </aside>
   );
