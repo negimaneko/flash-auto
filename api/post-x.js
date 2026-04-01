@@ -194,29 +194,6 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const isDryRun = url.searchParams.get("dry") === "1";
-  const isDebug = url.searchParams.get("debug") === "1";
-
-  // デバッグモード: 環境変数の読み込み状態を返す（値は先頭4文字のみ）
-  if (isDebug) {
-    const keys = ["X_API_KEY", "X_API_KEY_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"];
-    const info = {};
-    for (const k of keys) {
-      const v = process.env[k];
-      if (!v) { info[k] = "未設定"; continue; }
-      const trimmed = v.trim();
-      info[k] = {
-        head: v.slice(0, 4),
-        tail: v.slice(-4),
-        len: v.length,
-        trimLen: trimmed.length,
-        hasWhitespace: v !== trimmed,
-        hasNewline: v.includes("\n") || v.includes("\r"),
-        hasQuote: v.includes('"') || v.includes("'"),
-      };
-    }
-    return res.status(200).json({ envCheck: info });
-  }
-
   // カスタムテキストが指定されていればそれを使う、なければAI生成
   let body = {};
   try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {}; } catch {}
