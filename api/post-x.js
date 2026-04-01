@@ -137,8 +137,13 @@ ${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
 ・「3時間溶けた。でもやっと動いた」
 ・「入れた機能、その日のうちに消した。よくある」
 
-【ハッシュタグ】
-#個人開発 #AI活用 #語学学習 から1〜2個。内容に合わせて選ぶ
+【ハッシュタグ — 重要：同じタグの連続使用を避けること】
+以下のプールから内容に最も合うものを1〜2個選べ。毎回同じタグにならないよう意識すること。
+- 開発系: #個人開発 #プログラミング #開発日記 #ものづくり #webサービス
+- AI系: #AI活用 #AI開発 #生成AI #Claude
+- 学習系: #語学学習 #英語学習 #単語帳 #学習アプリ
+- その他: #駆け出しエンジニア #19歳 #未経験エンジニア
+ハッシュタグなしの投稿もOK（3回に1回程度はタグなしにする）
 
 投稿文のみ出力してください。説明や前置きは不要。`;
 
@@ -196,7 +201,7 @@ export default async function handler(req, res) {
   const isDryRun = url.searchParams.get("dry") === "1";
   // カスタムテキストが指定されていればそれを使う、なければAI生成
   let body = {};
-  try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {}; } catch {}
+  try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {}; } catch { /* ignore parse errors */ }
   const postText = body.customText || await generateXPost();
 
   if (!postText) {

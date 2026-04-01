@@ -97,7 +97,7 @@ describe("sanitizeCards", () => {
 
   it("最低枚数5未満でエラーを投げる", () => {
     const cards = makeCards(3);
-    expect(() => sanitizeCards(cards, 5, 15)).toThrow("AI returned an invalid deck.");
+    expect(() => sanitizeCards(cards, 5, 15)).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 
   it("最低枚数5以上ならエラーにならない（緩和確認）", () => {
@@ -510,7 +510,7 @@ describe("フィルタチェーン統合テスト", () => {
     expect(step2).toHaveLength(3); // 職種説明定義 2枚除去
 
     // 最終的に5枚未満 → sanitizeCards(min=5) はエラー
-    expect(() => sanitizeCards(step2, 5, 15)).toThrow("AI returned an invalid deck.");
+    expect(() => sanitizeCards(step2, 5, 15)).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
     // min=3 にすれば通過
     expect(() => sanitizeCards(step2, 3, 15)).not.toThrow();
   });
@@ -637,7 +637,7 @@ describe("filterCharacterCards", () => {
     const filtered = filterCharacterCards(allBadCards, "ハズビンホテルのキャラクター");
     expect(filtered).toHaveLength(0);
     // sanitizeCards(filtered, 3, 15) がエラーを投げることを確認
-    expect(() => sanitizeCards(filtered, 3, 15)).toThrow("AI returned an invalid deck.");
+    expect(() => sanitizeCards(filtered, 3, 15)).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 });
 
@@ -840,7 +840,7 @@ describe("filterGenericConceptCards", () => {
 describe("checkCharacterDeckRatio", () => {
   it("キャラクタートピックでrawCount>=6かつvalidRatio<0.4のとき例外を投げる", () => {
     // 10枚中3枚しか残らなかった場合 (30% < 40%)
-    expect(() => checkCharacterDeckRatio(10, 3, "ちいかわのキャラクター")).toThrow("AI returned an invalid deck.");
+    expect(() => checkCharacterDeckRatio(10, 3, "ちいかわのキャラクター")).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 
   it("validRatioが0.4以上ならエラーにならない", () => {
@@ -978,7 +978,7 @@ describe("回帰テスト: ちいかわのキャラクター (一般語混入パ
 
   it("checkCharacterDeckRatioが一般語過多のとき例外を投げる（rawCount=10, valid=3のケース）", () => {
     // raw=10枚のうち7枚がフィルタされた場合(valid=3, 30%<40%)
-    expect(() => checkCharacterDeckRatio(10, 3, "ちいかわのキャラクター")).toThrow("AI returned an invalid deck.");
+    expect(() => checkCharacterDeckRatio(10, 3, "ちいかわのキャラクター")).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 });
 
@@ -1037,7 +1037,7 @@ describe("回帰テスト: ハズビンホテルのキャラクター (役職語
 
   it("全フィルタ適用後の残存3枚でcheckCharacterDeckRatioが例外を投げる", () => {
     // rawCount=10, validCount=3 → 30% < 40% → invalid
-    expect(() => checkCharacterDeckRatio(10, 3, "ハズビンホテルのキャラクター")).toThrow("AI returned an invalid deck.");
+    expect(() => checkCharacterDeckRatio(10, 3, "ハズビンホテルのキャラクター")).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 
   it("全フィルタ適用後の残存3枚でsanitizeCards(min=5)が例外を投げる", () => {
@@ -1045,7 +1045,7 @@ describe("回帰テスト: ハズビンホテルのキャラクター (役職語
     const afterRole = filterCharacterCards(parsed.cards, "ハズビンホテルのキャラクター");
     const afterConcept = filterGenericConceptCards(afterRole, "ハズビンホテルのキャラクター");
     const afterJob = filterJobDescriptionCards(afterConcept, "ハズビンホテルのキャラクター");
-    expect(() => sanitizeCards(afterJob, 5, 15)).toThrow("AI returned an invalid deck.");
+    expect(() => sanitizeCards(afterJob, 5, 15)).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 
   it("実在キャラ3枚は全フィルタ後も残る", () => {
@@ -1255,7 +1255,7 @@ describe("verifyCharacterCards", () => {
 describe("回帰テスト: ちいかわのキャラクター (外部照合ゲート)", () => {
   it("照合で架空キャラ名を落とし、checkCharacterDeckRatioで失敗扱いにできる", () => {
     // 照合後に残った候補が少ない（rawCount基準で比率不足）場合
-    expect(() => checkCharacterDeckRatio(10, 2, "ちいかわのキャラクター")).toThrow("AI returned an invalid deck.");
+    expect(() => checkCharacterDeckRatio(10, 2, "ちいかわのキャラクター")).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 
   it("照合後に実在キャラが十分あれば通過する", async () => {
@@ -1312,7 +1312,7 @@ describe("回帰テスト: ハズビンホテルのキャラクター (外部照
 
   it("照合結果が空のとき、checkCharacterDeckRatioで無効判定できる", () => {
     // rawCount=8, validCount=0 → 0% < 40% → invalid
-    expect(() => checkCharacterDeckRatio(8, 0, "ハズビンホテルのキャラクター")).toThrow("AI returned an invalid deck.");
+    expect(() => checkCharacterDeckRatio(8, 0, "ハズビンホテルのキャラクター")).toThrow("AIが有効な単語帳を生成できませんでした。もう一度お試しください。");
   });
 });
 

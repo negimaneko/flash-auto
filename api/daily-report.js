@@ -18,6 +18,7 @@ function getTodayJST() {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
 }
 
+// eslint-disable-next-line no-unused-vars -- 将来使用予定
 function getNowJST() {
   return new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
 }

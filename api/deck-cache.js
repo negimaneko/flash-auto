@@ -1,6 +1,6 @@
 import { requestGroqChat } from "./_shared/groq.js";
 import { requestGeminiChat } from "./_shared/gemini.js";
-import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
+import { getSupabaseAdmin } from "./_shared/supabase.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
 import { checkRateLimit, getClientIp } from "./_shared/rate-limit.js";
 import { fetchCharacterData } from "./_shared/wikipedia.js";
