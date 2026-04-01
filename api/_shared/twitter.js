@@ -27,6 +27,9 @@ export async function postTweet(text) {
     return { ok: false, error: `Missing env: ${missing.join(", ")}` };
   }
 
+  // デバッグ: キーの先頭4文字だけ表示（値が正しく読まれているか確認）
+  console.log(`[Twitter] keys: API=${apiKey?.slice(0,4)}... SECRET=${apiSecret?.slice(0,4)}... TOKEN=${accessToken?.slice(0,4)}... TOKEN_SECRET=${accessSecret?.slice(0,4)}...`);
+
   try {
     const client = new TwitterApi({
       appKey: apiKey,
