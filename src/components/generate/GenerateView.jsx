@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Recycle } from "lucide-react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { CharCount } from "../shared/CharCount.jsx";
 import { LanguageInput } from "../shared/LanguageInput.jsx";
@@ -327,7 +328,7 @@ export function GenerateView({onSave,onBack,showToast}) {
           <div className="section-title">プレビュー</div>
           {fromCache && (
             <div className="cache-hit-banner">
-              <span className="cache-hit-icon">♻️</span>
+              <span className="cache-hit-icon"><Recycle size={18} /></span>
               <div className="cache-hit-body">
                 <strong>以前に生成済みの内容を表示しています</strong>
                 <span>同じテーマは再生成されません。内容を変えたい場合は「必ず含める単語」を追加するか、テーマを変えてください。</span>

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Trophy } from "lucide-react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { AppSidebar } from "../layout/AppSidebar.jsx";
 
@@ -98,7 +99,7 @@ export function StatsView({ decks, onBack, onOpenDetail, onMenuClick }) {
                   <button key={d.id} className="stats-deck-row" onClick={() => onOpenDetail && onOpenDetail(decks.find(dk => dk.id === d.id))}>
                     <div className="stats-deck-info">
                       <div className="stats-deck-name">
-                        {d.cleared && <span className="stats-cleared-badge">{"\uD83C\uDFC6"}</span>}
+                        {d.cleared && <span className="stats-cleared-badge"><Trophy size={14} /></span>}
                         {d.name}
                       </div>
                       <div className="stats-deck-meta">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 
 export function FlipView({deck,onBack}) {
   const cards = deck?.cards || [];
@@ -60,7 +61,7 @@ export function FlipView({deck,onBack}) {
         <button className="nbtn ghost" onClick={onBack}>← 戻る</button>
         <span className="study-deck-title">{deck.name}</span>
         <button className="mode-switch-btn" onClick={() => { setFrontIsWord((f) => !f); setFlipped(false); }}>
-          {frontIsWord ? "🔄 単語が表" : "🔄 定義が表"}
+          <RefreshCw size={14} /> {frontIsWord ? "単語が表" : "定義が表"}
         </button>
       </div>
 

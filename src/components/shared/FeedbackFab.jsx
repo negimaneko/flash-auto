@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageCircle, X } from "lucide-react";
 
 export const FEEDBACK_FORM_URL = "https://forms.gle/6fggs7Ce7SoXBs9E8";
 
@@ -13,8 +14,8 @@ export function FeedbackFab() {
       {open && (
         <div className="feedback-overlay" onClick={() => setOpen(false)}>
           <div className="feedback-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="feedback-close" onClick={() => setOpen(false)}>✕</button>
-            <div className="feedback-modal-icon">💬</div>
+            <button className="feedback-close" onClick={() => setOpen(false)}><X size={18} /></button>
+            <div className="feedback-modal-icon"><MessageCircle size={32} /></div>
             <h3 className="feedback-modal-title">ご意見・ご感想をお聞かせください</h3>
             <p className="feedback-modal-desc">
               Flash Autoをより良くするために、あなたの声を聞かせてください。<br/>

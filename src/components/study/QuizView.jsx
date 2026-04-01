@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Trophy, Check, X as XIcon } from "lucide-react";
 import { ResultDonut } from "../shared/CircularProgress.jsx";
 import { shuffle } from "../../utils.js";
 import { aiEval, aiMastery } from "../../api.js";
@@ -279,7 +280,7 @@ export function QuizView({deck,mode,isTest,onBack,onCleared,onUpdateStreaks,show
 
             {isTest && (
               <div className={"test-verdict " + (passed ? "verdict-pass" : "verdict-fail")}>
-                <div className="test-verdict-icon">{passed ? "\uD83C\uDFC6" : ""}</div>
+                <div className="test-verdict-icon">{passed ? <Trophy size={32} /> : ""}</div>
                 <div className="test-verdict-text">{passed ? "合格！単語帳クリア！" : "不合格"}</div>
                 {!passed && <div className="test-verdict-sub">{incorrectCount}問不正解 — もう一度挑戦しましょう</div>}
               </div>
@@ -338,7 +339,7 @@ export function QuizView({deck,mode,isTest,onBack,onCleared,onUpdateStreaks,show
                 const m = (!isTest && isChoiceMode) ? masteryMap.find(x => x.id === card.id) : null;
                 return (
                   <div key={card.id} className={`result-answer-row ${r?.correct ? "correct" : "incorrect"}`}>
-                    <div className="result-answer-icon">{r?.correct ? "\u2713" : "\u2717"}</div>
+                    <div className="result-answer-icon">{r?.correct ? <Check size={16} /> : <XIcon size={16} />}</div>
                     <div className="result-answer-word">
                       {card.word}
                       {m?.mastered && <span className="mastery-badge">暗記済</span>}

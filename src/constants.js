@@ -1,6 +1,6 @@
 export const LANGUAGES = [
   { code: "en", label: "英語", native: "English" },
-  { code: "technical", label: "🔬 専門用語" },
+  { code: "technical", label: "専門用語" },
   { code: "zh", label: "中国語", native: "中文" },
   { code: "ko", label: "韓国語", native: "한국어" },
   { code: "fr", label: "フランス語", native: "Français" },

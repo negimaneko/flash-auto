@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { Sparkles, X } from "lucide-react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { CharCount } from "../shared/CharCount.jsx";
 import { AppSidebar } from "../layout/AppSidebar.jsx";
@@ -109,7 +110,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
     <div className="page">
       <Navbar onMenuClick={onMenuClick} right={
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
+          <button className="nbtn ai-btn" onClick={onGenerate}><Sparkles size={16} color="#f59e0b" fill="#f59e0b" /> AI作成</button>
           <button className="nbtn primary" onClick={onNew}>手動作成</button>
         </div>
       }/>
@@ -146,7 +147,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
                   style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
                 />
                 <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
-                  {quickLoading ? "生成中..." : "✨ 無料で単語帳を作る"}
+                  {quickLoading ? "生成中..." : <><Sparkles size={16} color="#f59e0b" fill="#f59e0b" /> 無料で単語帳を作る</>}
                 </button>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:2 }}>
@@ -234,7 +235,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
                 maxLength={100}
               />
               {searchQuery && (
-                <button className="set-search-clear" onClick={() => setSearchQuery("")} aria-label="クリア">✕</button>
+                <button className="set-search-clear" onClick={() => setSearchQuery("")} aria-label="クリア"><X size={14} /></button>
               )}
             </div>
 
@@ -244,7 +245,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
                 <p>{searchQuery.trim() ? `「${searchQuery.trim()}」に一致するセットが見つかりませんでした。` : filter==="fav" ? "保存済みのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
+                    <button className="nbtn ai-btn" onClick={onGenerate}><Sparkles size={16} color="#f59e0b" fill="#f59e0b" /> AI作成</button>
                     <button className="nbtn primary" onClick={onNew}>手動作成</button>
                   </div>
                 )}
