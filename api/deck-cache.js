@@ -113,9 +113,13 @@ function sanitizeCards(cards, minCards, maxCards, excludedWords = []) {
 /**
  * テーマが「特定作品の登場人物」系かどうかを判定する。
  * 例: 「ハズビンホテルのキャラクター」「SPY×FAMILYの登場人物」
+ *
+ * 除外: 「キャラクターデザイン」「人物相関図」等の非キャラ一覧テーマ
  */
 function isCharacterTopic(topic) {
-  return /の(?:キャラクター|登場人物|キャスト|人物|メンバー)/.test(topic);
+  // 除外パターンを先にチェック（「キャラクターデザイン」「人物関係図」等はキャラ一覧ではない）
+  if (/の(?:キャラクター|人物)(?:デザイン|設定|相関図?|関係図?|紹介|分析|考察)/.test(topic)) return false;
+  return /の(?:キャラクター|キャラ|登場人物|登場キャラ|キャスト|人物|メンバー|仲間たち?|仲間)(?:一覧|たち|達)?$/.test(topic);
 }
 
 /**
@@ -123,7 +127,7 @@ function isCharacterTopic(topic) {
  * 例: 「ハズビンホテルのキャラクター」→「ハズビンホテル」
  */
 function extractWorkTitle(topic) {
-  const match = topic.match(/^(.+?)の(?:キャラクター|登場人物|キャスト|人物|メンバー)/);
+  const match = topic.match(/^(.+?)の(?:キャラクター|キャラ|登場人物|登場キャラ|キャスト|人物|メンバー|仲間たち?|仲間)/);
   return match ? match[1].trim() : null;
 }
 
@@ -216,10 +220,14 @@ const JOB_DESCRIPTION_ONLY_PATTERNS = [
 function isJobDescriptionDefinition(definition) {
   if (!definition) return false;
   const d = definition.trim();
-  // 短い定義（40文字未満）で役職語を含む場合は職種説明とみなす
-  if (d.length < 40 && GENERIC_ROLE_PATTERNS.some((p) => p.test(d))) return true;
-  // 特定の職種説明パターンに一致する場合
-  return JOB_DESCRIPTION_ONLY_PATTERNS.some((p) => p.test(d));
+  // 特定の職種説明パターンに一致する場合（パターン優先）
+  if (JOB_DESCRIPTION_ONLY_PATTERNS.some((p) => p.test(d))) return true;
+  // 短い定義で役職語を含む場合：キャラクター固有情報（性格・外見・関係性）があれば除外しない
+  if (GENERIC_ROLE_PATTERNS.some((p) => p.test(d))) {
+    const hasCharacterInfo = /(?:性格|外見|容姿|関係|親友|恋人|ライバル|能力|魔法|悪魔|天使|personality|appearance|relationship)/i.test(d);
+    if (!hasCharacterInfo && d.length < 60) return true;
+  }
+  return false;
 }
 
 // ---- 一般概念語・周辺語フィルタ ----

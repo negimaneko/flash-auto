@@ -439,6 +439,11 @@ describe("isJobDescriptionDefinition", () => {
     expect(isJobDescriptionDefinition("")).toBe(false);
     expect(isJobDescriptionDefinition(null)).toBe(false);
   });
+
+  it("短くても性格・関係性の情報があれば異常として検出しない", () => {
+    expect(isJobDescriptionDefinition("メイドだが性格は攻撃的。")).toBe(false);
+    expect(isJobDescriptionDefinition("コンシェルジュで親友の恋人。")).toBe(false);
+  });
 });
 
 // ====================================================================
@@ -539,6 +544,24 @@ describe("isCharacterTopic", () => {
     expect(isCharacterTopic("量子力学の基礎")).toBe(false);
     expect(isCharacterTopic("ホテルのサービス用語")).toBe(false);
     expect(isCharacterTopic("経済学の応用")).toBe(false);
+  });
+
+  it("略称「のキャラ」「の登場キャラ」も検出する", () => {
+    expect(isCharacterTopic("ワンピースのキャラ")).toBe(true);
+    expect(isCharacterTopic("鬼滅の刃の登場キャラ")).toBe(true);
+  });
+
+  it("「のキャラクター一覧」「のキャラクターたち」も検出する", () => {
+    expect(isCharacterTopic("ハズビンホテルのキャラクター一覧")).toBe(true);
+    expect(isCharacterTopic("ちいかわのキャラクターたち")).toBe(true);
+    expect(isCharacterTopic("進撃の巨人の仲間たち")).toBe(true);
+  });
+
+  it("「のキャラクターデザイン」等の非キャラ一覧テーマは除外する", () => {
+    expect(isCharacterTopic("ハズビンホテルのキャラクターデザイン")).toBe(false);
+    expect(isCharacterTopic("SPY×FAMILYの人物相関図")).toBe(false);
+    expect(isCharacterTopic("ちいかわのキャラクター設定")).toBe(false);
+    expect(isCharacterTopic("進撃の巨人の人物考察")).toBe(false);
   });
 });
 
