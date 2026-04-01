@@ -38,9 +38,17 @@ export async function postTweet(text) {
       accessSecret,
     });
 
-    const { data } = await client.v2.tweet(text);
-    console.log("[Twitter] 投稿成功, tweet_id:", data.id);
-    return { ok: true, tweetId: data.id };
+    // v2 → v1 フォールバック
+    try {
+      const { data } = await client.v2.tweet(text);
+      console.log("[Twitter] v2 投稿成功, tweet_id:", data.id);
+      return { ok: true, tweetId: data.id };
+    } catch (v2Err) {
+      console.warn("[Twitter] v2 失敗:", v2Err.message, "— v1 にフォールバック");
+      const tweet = await client.v1.tweet(text);
+      console.log("[Twitter] v1 投稿成功, tweet_id:", tweet.id_str);
+      return { ok: true, tweetId: tweet.id_str };
+    }
   } catch (err) {
     const detail = err.data ? JSON.stringify(err.data) : err.message;
     console.error("[Twitter] 投稿失敗:", detail);
