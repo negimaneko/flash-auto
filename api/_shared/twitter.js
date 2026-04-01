@@ -39,7 +39,9 @@ export async function postTweet(text) {
     console.log("[Twitter] 投稿成功, tweet_id:", data.id);
     return { ok: true, tweetId: data.id };
   } catch (err) {
-    console.error("[Twitter] 投稿失敗:", err.message);
-    return { ok: false, error: err.message };
+    const detail = err.data ? JSON.stringify(err.data) : err.message;
+    console.error("[Twitter] 投稿失敗:", detail);
+    console.error("[Twitter] code:", err.code, "statusCode:", err.statusCode);
+    return { ok: false, error: detail };
   }
 }
