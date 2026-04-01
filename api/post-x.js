@@ -1,9 +1,9 @@
 /**
  * X (Twitter) 自動投稿 API
  *
- * Vercel Cron から毎日 14:50 UTC（= 23:50 JST）に呼び出される。
- * 1. 当日の git コミットログを取得（Vercel上では取得不可のため AI 生成のみ）
- * 2. AI で X 投稿文を生成
+ * Vercel Cron から毎日 03:17 UTC（= 12:17 JST）に呼び出される。
+ * 1. Notion 開発ログから直近の作業内容を取得
+ * 2. 実際の開発内容をもとに AI で投稿文を生成
  * 3. X に投稿
  * 4. Telegram に投稿結果を通知
  *
@@ -15,6 +15,7 @@ import { requestGroqChat } from "./_shared/groq.js";
 import { requestGeminiChat } from "./_shared/gemini.js";
 import { postTweet } from "./_shared/twitter.js";
 import { sendTelegramMessage } from "./_shared/telegram.js";
+import { fetchRecentDevLogs } from "./_shared/notion.js";
 
 // ─── タイムゾーンヘルパー ───
 function getTodayJST() {
@@ -43,29 +44,71 @@ function verifyCronAuth(req) {
   return authHeader === `Bearer ${cronSecret}`;
 }
 
+// ─── 開発ログを整形 ───
+function formatDevContext(logs) {
+  if (!logs || logs.length === 0) return null;
+
+  return logs
+    .filter((log) => log.summary)
+    .map((log) => {
+      const lines = [`【${log.date}】${log.project ? ` (${log.project})` : ""}`];
+      lines.push(log.summary);
+      if (log.commits) lines.push(`コミット数: ${log.commits} / +${log.added} -${log.deleted}行`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
 // ─── AI で投稿文を生成 ───
 async function generateXPost() {
   const todayJST = getTodayJST();
   const dayOfWeek = getDayOfWeekJST();
 
+  // Notion から直近の開発ログを取得
+  let devContext = null;
+  let recentDrafts = [];
+  try {
+    const logs = await fetchRecentDevLogs(3);
+    devContext = formatDevContext(logs);
+    recentDrafts = logs.map((l) => l.draft).filter(Boolean);
+    console.log(`[post-x] 開発ログ ${logs.length} 件取得`);
+  } catch (err) {
+    console.warn("[post-x] 開発ログ取得失敗（フォールバック）:", err.message);
+  }
+
   const prompt = `今日は${todayJST}（${dayOfWeek}）です。
-あなたは個人開発者のXアカウントの運用を代行しています。
+あなたは個人開発者のXアカウント（@create_Aiapp）の運用を代行しています。
 
-以下のルールに従って、X（旧Twitter）の投稿文を1つ生成してください。
+以下の「実際の開発内容」をもとに、X（旧Twitter）の投稿文を1つ生成してください。
 
-【プロジェクト情報】
-- AI生成単語帳アプリ「Flash Auto」を個人開発中
-- テーマを入力するとAIが自動で単語帳を作成する
-- 語学学習・専門用語の学習に使える
+${devContext ? `═══ 直近の開発内容（これが最も重要な素材）═══
+${devContext}
+═══════════════════════════════════════` : "（開発ログの取得に失敗しました。一般的な個人開発の話題で書いてください）"}
+
+${recentDrafts.length > 0 ? `═══ 過去の投稿下書き（これらと似た内容は避けること）═══
+${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
+═══════════════════════════════════════` : ""}
+
+【投稿の方向性 — 以下の切り口からランダムに選ぶこと】
+- 今日やった作業の具体的な内容・結果（「〜を実装した」「〜を修正した」）
+- 試行錯誤のエピソード（「〜を入れたけど微妙だったから消した」「3時間ハマった」）
+- 仕組みづくりの話（自動化、Notion連携、Claude活用、CI/CDなど）
+- 技術選定の裏話（「〜を選んだ理由」「〜は合わなかった」）
+- 開発で学んだこと・気づき
+- ユーザー目線での体験の変化（「この機能で〜が楽になった」）
+- 個人開発のリアル（モチベ、時間管理、失敗談）
+- AI活用の具体例（「AIに〜させたら〜だった」）
+
+【重要な注意】
+- 実際の開発内容に基づくこと。架空の進捗やエピソードを書くな
+- 「Flash Auto」のプロモーションが主目的ではない。開発者の独り言・日記として面白い投稿を書く
+- プロダクト名は毎回入れなくてよい。文脈で自然に触れる程度でOK
+- 過去の投稿と同じ切り口・構成にしない
+
+【アカウント情報】
+- 19歳・未経験の個人開発者
+- AI生成単語帳アプリ「Flash Auto」を開発中
 - Claude Code（AI）を活用して開発を進めている
-
-【投稿ルール】
-- ターゲット: 個人開発者、語学学習者、AI活用に興味がある非エンジニア
-- 内容: 技術の詳細ではなく「何が便利になったか」「どんな体験ができるか」を読者目線で書く
-- アプリURLは含めない
-- ハッシュタグ: #個人開発 #AI活用 #語学学習 から1〜2個使用
-- 280文字以内（日本語）
-- 投稿文のみ出力（説明や前置きは不要）
 
 【口調ルール（最重要 — 必ず守ること）】
 - 断定系多め。「〜かもしれない」「〜な気がする」は禁止。「〜だった」「〜の方がいい」「〜は微妙」のように言い切る
@@ -77,11 +120,12 @@ async function generateXPost() {
 - 「〜かもしれませんが〜嬉しいです」「まるで魔法のような〜」のような表現は絶対に使わない
 
 【書式ルール】
+- 280文字以内（日本語）
 - 1文ごとに改行を入れて読みやすくする
 - 冒頭にキャッチーな一言を置き、改行で区切る
 - 絵文字を適度に使う（1〜3個。多すぎない）
 - ハッシュタグは最終行にまとめ、本文と1行空ける
-- ダラダラ続く長文は禁止。短い文を積み重ねるスタイル
+- 短い文を積み重ねるスタイル。ダラダラ続く長文は禁止
 
 【口調の例（この温度感に合わせること）】
 ・「地味だけど、ここが一番まずかった」
@@ -89,26 +133,14 @@ async function generateXPost() {
 ・「便利そうで、実際は微妙だった」
 ・「検索機能つけたら精度が全然変わった。Wikipedia偉大すぎる」
 ・「3時間溶けた。でもやっと動いた」
+・「入れた機能、その日のうちに消した。よくある」
 
-【書式の例】
-単語帳、手で作るの正直だるい🤔
+【ハッシュタグ】
+#個人開発 #AI活用 #語学学習 から1〜2個。内容に合わせて選ぶ
 
-だからAIに全部やらせることにした。
-テーマ入れるだけで単語も定義も出てくる。
+投稿文のみ出力してください。説明や前置きは不要。`;
 
-これが正解だった。
-
-#個人開発 #語学学習
-
-【バリエーション】
-毎日違う切り口で書いてください。例：
-- 開発の進捗・裏話
-- 語学学習のあるある・コツ
-- AI活用の面白さ
-- 個人開発のモチベーション
-- ユーザー目線の便利さ`;
-
-  const systemPrompt = "あなたはSNS運用のプロです。断定的で短い文体、飾らない開発者の独り言のようなトーンで投稿を作成します。ポエム調や丁寧すぎる表現は禁止。投稿文のみを出力してください。";
+  const systemPrompt = "あなたはSNS運用のプロです。開発者の実際の作業内容をもとに、リアルで共感できる投稿を作成します。断定的で短い文体、飾らない独り言トーン。宣伝臭を出さず、開発の日記・裏話として面白い投稿を書きます。ポエム調や丁寧すぎる表現は禁止。投稿文のみを出力してください。";
 
   let text = null;
 
