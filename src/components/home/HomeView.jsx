@@ -109,8 +109,8 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
     <div className="page">
       <Navbar onMenuClick={onMenuClick} right={
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
-          <button className="nbtn primary" onClick={onNew}>手動作成</button>
+          <button className="nbtn primary" onClick={onGenerate}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:"-2px",marginRight:4}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>自動作成</button>
+          <button className="nbtn ghost" onClick={onNew}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:"-2px",marginRight:4}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>手動作成</button>
         </div>
       }/>
       <div className="app-shell">
@@ -124,8 +124,8 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
 
         <main className="shell-main">
           <section className="dashboard-hero">
-            <div className="section-kicker">AI単語帳</div>
-            <h1 className="dashboard-title">テーマを入れるだけ。<br/>AIが単語帳を自動作成。</h1>
+            <div className="section-kicker">単語帳</div>
+            <h1 className="dashboard-title">テーマを入れるだけ。<br/>単語帳を自動作成。</h1>
             <p className="dashboard-copy">登録不要・無料・ブラウザだけで使える</p>
 
             <div className="quick-gen-box">
@@ -145,8 +145,8 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
                   maxLength={LIMITS.TOPIC}
                   style={quickTopic.length > LIMITS.TOPIC ? { borderColor:"var(--red)" } : {}}
                 />
-                <button className="nbtn ai-btn quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
-                  {quickLoading ? "生成中..." : "✨ 無料で単語帳を作る"}
+                <button className="nbtn primary quick-gen-btn" onClick={handleQuickGenerate} disabled={quickLoading || !quickTopic.trim() || quickTopic.length > LIMITS.TOPIC}>
+                  {quickLoading ? "作成中..." : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:"-2px",marginRight:4}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>無料で単語帳を作る</>}
                 </button>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:2 }}>
@@ -244,8 +244,8 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
                 <p>{searchQuery.trim() ? `「${searchQuery.trim()}」に一致するセットが見つかりませんでした。` : filter==="fav" ? "保存済みのセットはまだありません。" : "まだセットがありません。まずは1つ作成してください。"}</p>
                 {filter==="all" && (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"center"}}>
-                    <button className="nbtn ai-btn" onClick={onGenerate}>✨ AI作成</button>
-                    <button className="nbtn primary" onClick={onNew}>手動作成</button>
+                    <button className="nbtn primary" onClick={onGenerate}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:"-2px",marginRight:4}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>自動作成</button>
+                    <button className="nbtn ghost" onClick={onNew}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:"-2px",marginRight:4}}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>手動作成</button>
                   </div>
                 )}
               </div>
