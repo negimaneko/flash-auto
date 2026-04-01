@@ -17,10 +17,6 @@
     {
       "path": "/api/daily-report",
       "schedule": "53 13 * * *"
-    },
-    {
-      "path": "/api/cc-info-scout",
-      "schedule": "0 0 * * 1,3,5"
     }
   ]
 }
