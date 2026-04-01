@@ -202,7 +202,17 @@ export default async function handler(req, res) {
     const info = {};
     for (const k of keys) {
       const v = process.env[k];
-      info[k] = v ? `${v.slice(0, 4)}...(${v.length}文字)` : "未設定";
+      if (!v) { info[k] = "未設定"; continue; }
+      const trimmed = v.trim();
+      info[k] = {
+        head: v.slice(0, 4),
+        tail: v.slice(-4),
+        len: v.length,
+        trimLen: trimmed.length,
+        hasWhitespace: v !== trimmed,
+        hasNewline: v.includes("\n") || v.includes("\r"),
+        hasQuote: v.includes('"') || v.includes("'"),
+      };
     }
     return res.status(200).json({ envCheck: info });
   }
