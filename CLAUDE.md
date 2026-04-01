@@ -54,6 +54,7 @@ npm run dev   # http://localhost:5173 で起動
 | `GEMINI_API_KEY` | Gemini APIキー（デッキ生成用） | Gemini使用時 |
 | `SUPABASE_URL` | SupabaseプロジェクトURL | 共有キャッシュ使用時 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase認証キー | 共有キャッシュ使用時 |
+| `NOTION_API_KEY` | Notion内部インテグレーショントークン（X投稿の開発ログ取得用） | X自動投稿時 |
 
 ## AIプロバイダー構成（GEMINI_API_KEY設定後）
 | 用途 | モデル | 経路 |
