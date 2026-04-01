@@ -18,7 +18,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
   const appOpenRef = useRef(Date.now());
   const importRef = useRef(null);
 
-  const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎"];
+  const QUICK_SAMPLES = ["AI入門", "量子力学の応用", "TOEFL初級", "経済学の応用", "心理学の基礎", "鬼滅の刃キャラ", "宇宙の雑学"];
 
   const handleQuickGenerate = async () => {
     if (!quickTopic.trim() || quickLoading) return;

@@ -5,6 +5,7 @@
 
 const NOTION_API = "https://api.notion.com/v1";
 const DEV_LOG_DB_ID = "4491dc36-089f-459f-96fd-9f965a1cec7c";
+const CC_TOOLS_DB_ID = "d7504663-b810-4297-8dea-af4d2b3d9237";
 
 function getHeaders() {
   const token = process.env.NOTION_API_KEY;
@@ -51,4 +52,67 @@ export async function fetchRecentDevLogs(limit = 3) {
       posted: p["投稿済み"]?.checkbox || false,
     };
   });
+}
+
+/**
+ * CC Tools DBから既存エントリの名前一覧を取得（重複チェック用）
+ * @returns {Set<string>} 既存ツール名のSet
+ */
+export async function fetchCCToolNames() {
+  const results = [];
+  let cursor;
+
+  do {
+    const body = {
+      page_size: 100,
+      ...(cursor && { start_cursor: cursor }),
+    };
+    const res = await fetch(`${NOTION_API}/databases/${CC_TOOLS_DB_ID}/query`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Notion API エラー (${res.status}): ${text}`);
+    }
+    const data = await res.json();
+    for (const page of data.results) {
+      const name = page.properties["名前"]?.title?.[0]?.plain_text;
+      if (name) results.push(name.toLowerCase());
+    }
+    cursor = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+
+  return new Set(results);
+}
+
+/**
+ * CC Tools DBに新規エントリを作成
+ * @param {{ name: string, category: string, environment: string, url: string, summary: string }} entry
+ */
+export async function createCCToolEntry({ name, category, environment, url, summary, rank }) {
+  const res = await fetch(`${NOTION_API}/pages`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      parent: { database_id: CC_TOOLS_DB_ID },
+      properties: {
+        "名前": { title: [{ text: { content: name } }] },
+        "カテゴリ": { select: { name: category } },
+        "対応環境": { select: { name: environment } },
+        "導入済み": { checkbox: false },
+        ...(rank && { "ランク": { select: { name: rank } } }),
+        "発見日": { date: { start: new Date().toISOString().split("T")[0] } },
+        "URL": { url: url || null },
+        "概要": { rich_text: [{ text: { content: summary.slice(0, 2000) } }] },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Notion 書き込みエラー (${res.status}): ${text}`);
+  }
+  return res.json();
 }
