@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint src/ api/"
+    "lint": "eslint src/ api/",
+    "check": "bash scripts/hybrid/run-debug-check.sh",
+    "cache-audit": "node scripts/hybrid/run-cache-audit.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

@@ -158,7 +158,7 @@ export async function aiEval(term, correctDef, userAns, defLang) {
     const { text } = await callAI(prompt, 200);
     const cleaned = text.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"correct":false,"feedback":""}');
-  } catch (e) {
+  } catch {
     return { correct: false, feedback: "Could not evaluate the answer." };
   }
 }
@@ -212,7 +212,7 @@ export async function aiMastery(results) {
     const { text } = await callAI(prompt, 200);
     const cleaned = text.split("```json").join("").split("```").join("").trim();
     return JSON.parse(cleaned || '{"cleared":false,"message":""}');
-  } catch (e) {
+  } catch {
     return { cleared: false, message: "Mastery check could not be completed." };
   }
 }
