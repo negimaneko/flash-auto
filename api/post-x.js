@@ -195,8 +195,10 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const isDryRun = url.searchParams.get("dry") === "1";
 
-  // 投稿文を生成
-  const postText = await generateXPost();
+  // カスタムテキストが指定されていればそれを使う、なければAI生成
+  let body = {};
+  try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {}; } catch {}
+  const postText = body.customText || await generateXPost();
 
   if (!postText) {
     const errorMsg = "[post-x] 投稿文の生成に失敗しました";
