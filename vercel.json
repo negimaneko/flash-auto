@@ -7,10 +7,6 @@
   ],
   "crons": [
     {
-      "path": "/api/morning-message",
-      "schedule": "0 20 * * *"
-    },
-    {
       "path": "/api/post-x",
       "schedule": "17 3 * * *"
     },
