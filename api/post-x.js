@@ -152,6 +152,7 @@ ${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
   let text = null;
 
   // Groq → Gemini フォールバック
+  let lastError = null;
   try {
     text = await requestGroqChat({
       prompt,
@@ -162,6 +163,7 @@ ${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
     console.log("[post-x] Groq で生成成功");
   } catch (groqErr) {
     console.warn("[post-x] Groq 失敗:", groqErr.message);
+    lastError = `Groq: ${groqErr.message}`;
     try {
       text = await requestGeminiChat({
         prompt,
@@ -172,11 +174,12 @@ ${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
       console.log("[post-x] Gemini で生成成功");
     } catch (geminiErr) {
       console.error("[post-x] Gemini も失敗:", geminiErr.message);
-      return null;
+      lastError += ` / Gemini: ${geminiErr.message}`;
+      return { text: null, error: lastError };
     }
   }
 
-  if (!text) return null;
+  if (!text) return { text: null, error: lastError || "text was empty" };
 
   // 余計な引用符やマークダウンを除去
   text = text.replace(/^["「『]+|["」』]+$/g, "").trim();
@@ -185,7 +188,7 @@ ${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
     text = text.slice(0, 277) + "...";
   }
 
-  return text;
+  return { text, error: null };
 }
 
 // ─── メインハンドラー ───
@@ -202,13 +205,22 @@ export default async function handler(req, res) {
   // カスタムテキストが指定されていればそれを使う、なければAI生成
   let body = {};
   try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {}; } catch { /* ignore parse errors */ }
-  const postText = body.customText || await generateXPost();
+
+  let postText;
+  let genError;
+  if (body.customText) {
+    postText = body.customText;
+  } else {
+    const result = await generateXPost();
+    postText = result?.text || null;
+    genError = result?.error || null;
+  }
 
   if (!postText) {
-    const errorMsg = "[post-x] 投稿文の生成に失敗しました";
+    const errorMsg = `[post-x] 投稿文の生成に失敗しました: ${genError || "unknown"}`;
     console.error(errorMsg);
-    await sendTelegramMessage(`❌ X自動投稿失敗\n投稿文の生成に失敗しました`);
-    return res.status(500).json({ ok: false, error: "Failed to generate post" });
+    await sendTelegramMessage(`❌ X自動投稿失敗\n${genError || "投稿文の生成に失敗しました"}`);
+    return res.status(500).json({ ok: false, error: genError || "Failed to generate post" });
   }
 
   // Dry-run: 投稿せずに内容だけ返す
