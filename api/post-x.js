@@ -213,9 +213,9 @@ export default async function handler(req, res) {
     postText = body.customText;
     source = "custom";
   } else {
-    // ストックから未使用の下書きを優先的に使う
+    // ストックから未使用の下書きを優先的に使う（dry-runでは消費しない）
     try {
-      const stock = await popXStockDraft();
+      const stock = await popXStockDraft(!isDryRun);
       if (stock) {
         postText = stock.text;
         source = "stock";
