@@ -15,7 +15,7 @@ import { requestGroqChat } from "./_shared/groq.js";
 import { requestGeminiChat } from "./_shared/gemini.js";
 import { postTweet } from "./_shared/twitter.js";
 import { sendTelegramMessage } from "./_shared/telegram.js";
-import { fetchRecentDevLogs } from "./_shared/notion.js";
+import { fetchRecentDevLogs, popXStockDraft } from "./_shared/notion.js";
 
 // ─── タイムゾーンヘルパー ───
 function getTodayJST() {
@@ -208,12 +208,29 @@ export default async function handler(req, res) {
 
   let postText;
   let genError;
+  let source = "ai";
   if (body.customText) {
     postText = body.customText;
+    source = "custom";
   } else {
-    const result = await generateXPost();
-    postText = result?.text || null;
-    genError = result?.error || null;
+    // ストックから未使用の下書きを優先的に使う
+    try {
+      const stock = await popXStockDraft();
+      if (stock) {
+        postText = stock.text;
+        source = "stock";
+        console.log("[post-x] ストックから取得:", stock.pageId);
+      }
+    } catch (stockErr) {
+      console.warn("[post-x] ストック取得失敗:", stockErr.message);
+    }
+
+    // ストックがなければAI生成
+    if (!postText) {
+      const result = await generateXPost();
+      postText = result?.text || null;
+      genError = result?.error || null;
+    }
   }
 
   if (!postText) {
@@ -238,9 +255,10 @@ export default async function handler(req, res) {
   const result = await postTweet(postText);
 
   // Telegram に結果を通知
+  const sourceLabel = source === "stock" ? "📦ストック" : source === "custom" ? "✏️カスタム" : "🤖AI生成";
   if (result.ok) {
     await sendTelegramMessage(
-      `✅ X自動投稿完了\n\n${postText}\n\nhttps://x.com/i/status/${result.tweetId}`
+      `✅ X自動投稿完了（${sourceLabel}）\n\n${postText}\n\nhttps://x.com/i/status/${result.tweetId}`
     );
   } else {
     await sendTelegramMessage(

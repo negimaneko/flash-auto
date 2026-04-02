@@ -6,6 +6,7 @@
 const NOTION_API = "https://api.notion.com/v1";
 const DEV_LOG_DB_ID = "4491dc36-089f-459f-96fd-9f965a1cec7c";
 const CC_TOOLS_DB_ID = "d7504663-b810-4297-8dea-af4d2b3d9237";
+const X_STOCK_DB_ID = "52e03340-31d6-41d0-ab9b-8b1e5384d1b3";
 
 function getHeaders() {
   const token = process.env.NOTION_API_KEY;
@@ -52,6 +53,50 @@ export async function fetchRecentDevLogs(limit = 3) {
       posted: p["投稿済み"]?.checkbox || false,
     };
   });
+}
+
+/**
+ * X投稿ストックDBから未使用の下書きを1件取得し、使用済みに更新する
+ * @returns {{text: string, pageId: string} | null}
+ */
+export async function popXStockDraft() {
+  const res = await fetch(`${NOTION_API}/databases/${X_STOCK_DB_ID}/query`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      filter: {
+        property: "ステータス",
+        select: { equals: "未使用" },
+      },
+      sorts: [{ property: "作成日", direction: "ascending" }],
+      page_size: 1,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Notion API エラー (${res.status}): ${body}`);
+  }
+
+  const data = await res.json();
+  if (data.results.length === 0) return null;
+
+  const page = data.results[0];
+  const text = page.properties["投稿文"]?.title?.[0]?.plain_text || "";
+  if (!text) return null;
+
+  // 使用済みに更新
+  await fetch(`${NOTION_API}/pages/${page.id}`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      properties: {
+        "ステータス": { select: { name: "使用済み" } },
+      },
+    }),
+  });
+
+  return { text, pageId: page.id };
 }
 
 /**
