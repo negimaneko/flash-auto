@@ -20,11 +20,12 @@ export function LibraryView({ onBack, onOpenDetail, onToggleFav, onMenuClick, fa
     try {
       const { decks: fetched } = await fetchPublicDecks({ q: q || undefined, tag: tag || undefined });
       setDecks(fetched);
-      // タグなしで全件取得した場合のみタグ一覧を更新
-      if (!q && !tag) {
-        const tags = [...new Set(fetched.flatMap((d) => d.tags || []))].sort();
-        setAllTags(tags);
-      }
+      // 取得結果のタグを既存と合わせて一覧に反映
+      const fetchedTags = fetched.flatMap((d) => d.tags || []);
+      setAllTags(prev => {
+        const merged = new Set([...(q || tag ? prev : []), ...fetchedTags]);
+        return [...merged].sort();
+      });
     } catch (e) {
       console.error("公開デッキ取得エラー:", e);
       setError(e.message);

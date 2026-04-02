@@ -15,6 +15,9 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "./_shared/supabase.js";
 import { handlePreflight, setCors } from "./_shared/cors.js";
 
+// ボット判定用のUser-Agentパターン
+const BOT_UA_PATTERN = /bot|crawl|spider|slurp|mediapartners|facebookexternalhit|bingpreview|linkedinbot|twitterbot|whatsapp|telegram|bytespider|gptbot|claude|anthropic|petalbot|semrush|ahref|mj12bot|dotbot|rogerbot|seznambot|yandex|baidu|sogou|exabot|ia_archiver|archive\.org|headlesschrome|phantomjs|prerender|lighthouse|pagespeed|wget|curl|python-requests|httpx|axios|node-fetch|go-http-client|java\//i;
+
 const ALLOWED_EVENTS = new Set([
   "app_open",
   "signup_guest",
@@ -32,6 +35,13 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  // ボットのUser-Agentを弾く（200を返してサイレントに無視）
+  const ua = req.headers["user-agent"] || "";
+  if (!ua || BOT_UA_PATTERN.test(ua)) {
+    res.status(200).json({ ok: true });
     return;
   }
 
