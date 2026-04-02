@@ -56,10 +56,11 @@ export async function fetchRecentDevLogs(limit = 3) {
 }
 
 /**
- * X投稿ストックDBから未使用の下書きを1件取得し、使用済みに更新する
+ * X投稿ストックDBから未使用の下書きを1件取得する（consume=trueで使用済みに更新）
+ * @param {boolean} consume 使用済みに更新するか（デフォルト: true）
  * @returns {{text: string, pageId: string} | null}
  */
-export async function popXStockDraft() {
+export async function popXStockDraft(consume = true) {
   const res = await fetch(`${NOTION_API}/databases/${X_STOCK_DB_ID}/query`, {
     method: "POST",
     headers: getHeaders(),
@@ -85,7 +86,8 @@ export async function popXStockDraft() {
   const text = page.properties["投稿文"]?.title?.[0]?.plain_text || "";
   if (!text) return null;
 
-  // 使用済みに更新
+  // 使用済みに更新（consume=falseならスキップ）
+  if (!consume) return { text, pageId: page.id };
   await fetch(`${NOTION_API}/pages/${page.id}`, {
     method: "PATCH",
     headers: getHeaders(),
