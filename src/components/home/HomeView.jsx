@@ -8,8 +8,10 @@ import { LIMITS } from "../../constants.js";
 import { getAnonymousUserId, trackEvent } from "../../lib/tracking.js";
 import { fetchDeckFromCacheOrGenerate } from "../../api.js";
 import { uid } from "../../utils.js";
+import { AuthButton } from "../shared/AuthButton.jsx";
+import { supabase } from "../../lib/supabase.js";
 
-export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash,onImport}) {
+export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,onToggleFav,onEdit,onDelete,onMenuClick,onSaveGeneratedDeck,onSaveAndStartFlash,onImport,user,onLogin,onLogout}) {
   const [filter,setFilter] = useState("all");
   const [quickTopic, setQuickTopic] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
@@ -110,6 +112,7 @@ export function HomeView({decks,onOpenDetail,onNew,onGenerate,onLibrary,onStats,
     <div className="page">
       <Navbar onMenuClick={onMenuClick} right={
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <AuthButton user={user} onLogin={onLogin} onLogout={onLogout} supabaseReady={!!supabase} />
           <button className="nbtn ai-btn" onClick={onGenerate}><Sparkles size={16} color="#f59e0b" fill="#f59e0b" /> AI作成</button>
           <button className="nbtn primary" onClick={onNew}>手動作成</button>
         </div>

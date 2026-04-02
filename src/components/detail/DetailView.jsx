@@ -155,8 +155,8 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
             <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav} title={deck.favorited?"保存済み":"保存"}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
             <button className="nbtn" onClick={() => { exportDeck(deck); showToast("エクスポートしました"); }}>エクスポート</button>
-            <button className="nbtn" onClick={onEdit}>単語帳編集</button>
-            <button className="nbtn danger" onClick={onDelete}>削除</button>
+            {!deck.isPublic && <button className="nbtn" onClick={onEdit}>単語帳編集</button>}
+            {!deck.isPublic && <button className="nbtn danger" onClick={onDelete}>削除</button>}
           </div>
         )}
       />
@@ -315,10 +315,12 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
                       <span className="term-label">定義</span>
                       <div className="term-value">{card.definition}</div>
                     </div>
+                    {!deck.isPublic && (
                     <div className="term-actions">
                       <button className="nbtn ghost icon-btn" onClick={()=>startEdit(card)} title="編集"><Pencil size={16} /></button>
                       <button className="nbtn danger icon-btn" onClick={()=>removeCard(card)} title="削除"><Trash2 size={16} /></button>
                     </div>
+                    )}
                   </>
                 )}
               </div>

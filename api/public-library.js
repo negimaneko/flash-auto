@@ -108,11 +108,13 @@ async function handlePublish(req, res, sb) {
     cards: cleanCards,
     card_count: cleanCards.length,
     published_by: userId || null,
+    source_deck_id: deck.id ? String(deck.id).slice(0, 100) : null,
   };
 
+  // source_deck_id + published_by が一致する既存行があれば更新、なければ挿入
   const { data, error } = await sb
     .from("public_decks")
-    .insert(row)
+    .upsert(row, { onConflict: "published_by,source_deck_id", ignoreDuplicates: false })
     .select("id, created_at")
     .single();
 
@@ -132,30 +134,18 @@ async function handleFav(req, res, sb) {
     return res.status(400).json({ error: "deckId と delta(1 or -1) は必須です。" });
   }
 
-  // RPC を使わず、現在値を取得して更新（楽観ロック無しだが匿名利用なので許容）
-  const { data: current, error: fetchErr } = await sb
-    .from("public_decks")
-    .select("save_count")
-    .eq("id", deckId)
-    .single();
+  const { data: result, error: rpcErr } = await sb
+    .rpc("increment_save_count", { deck_id: deckId, delta });
 
-  if (fetchErr || !current) {
-    return res.status(404).json({ error: "デッキが見つかりません。" });
+  if (rpcErr) {
+    console.error("increment_save_count error:", rpcErr);
+    const is404 = rpcErr.message?.includes("Deck not found");
+    return res.status(is404 ? 404 : 500).json({
+      error: is404 ? "デッキが見つかりません。" : "更新に失敗しました。",
+    });
   }
 
-  const newCount = Math.max(0, (current.save_count || 0) + delta);
-
-  const { error: updateErr } = await sb
-    .from("public_decks")
-    .update({ save_count: newCount })
-    .eq("id", deckId);
-
-  if (updateErr) {
-    console.error("public_decks fav update error:", updateErr);
-    return res.status(500).json({ error: "更新に失敗しました。" });
-  }
-
-  return res.status(200).json({ save_count: newCount });
+  return res.status(200).json({ save_count: result });
 }
 
 // ─── DB行 → クライアント形式に変換 ───

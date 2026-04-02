@@ -10,6 +10,10 @@ import { aiSuggest } from "../../api.js";
 export function CreateView({initial,onSave,onBack,showToast}) {
   const isEdit = !!initial;
   const [name,setName]=useState(initial?.name || "");
+  const [author,setAuthor]=useState(() => {
+    if (isEdit) return initial.author || "";
+    try { return localStorage.getItem("flash_auto_author") || ""; } catch { return ""; }
+  });
   const [isPublic,setIsPublic]=useState(initial?.isPublic ?? true);
   const [wordLang,setWordLang]=useState(normalizeLanguageValue(initial?.wordLang, "en"));
   const [defLang,setDefLang]=useState(normalizeLanguageValue(initial?.defLang, "ja"));
@@ -105,6 +109,9 @@ export function CreateView({initial,onSave,onBack,showToast}) {
       return;
     }
 
+    // 著者名を次回以降のために保存
+    try { if (author.trim()) localStorage.setItem("flash_auto_author", author.trim()); } catch {}
+
     onSave({
       id: isEdit ? initial.id : "my-" + uid(),
       name: name.trim(),
@@ -113,7 +120,7 @@ export function CreateView({initial,onSave,onBack,showToast}) {
       defLang: normalizeLanguageValue(defLang),
       detailLevel,
       tags,
-      author: isEdit ? initial.author : "あなた",
+      author: author.trim() || "匿名",
       cards: validCards,
       cleared: isEdit ? initial.cleared : false,
       masteredIds: isEdit ? (initial.masteredIds || []) : [],
@@ -179,6 +186,13 @@ export function CreateView({initial,onSave,onBack,showToast}) {
               <input type="checkbox" checked={isPublic} onChange={(e)=>setIsPublic(e.target.checked)} />
               <span className="settings-label">公開単語帳にする</span>
             </label>
+
+            {isPublic && (
+              <label style={{ display:"grid", gap:4, flex:"0 0 auto", minWidth:140 }}>
+                <span className="settings-label">著者名</span>
+                <input className="settings-select" value={author} onChange={(e)=>setAuthor(e.target.value)} placeholder="匿名" maxLength={50} style={{ width:"100%" }} />
+              </label>
+            )}
           </div>
         </div>
 
