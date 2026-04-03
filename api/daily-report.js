@@ -133,6 +133,12 @@ export default async function handler(req, res) {
     (u) => !u.is_internal && u.created_at >= todayStart && u.created_at <= todayEnd
   ).length;
 
+  // ─── 新規ユーザー0人ならスキップ ───
+  if (newToday === 0 && !isDryRun && url.searchParams.get("test") !== "1") {
+    console.log("[daily-report] 新規ユーザー0人 → スキップ");
+    return res.status(200).json({ ok: true, skipped: true, reason: "no_new_users" });
+  }
+
   // ─── イベント取得 ───
   let events = [];
   try {
