@@ -15,7 +15,7 @@ import { requestGroqChat } from "./_shared/groq.js";
 import { requestGeminiChat } from "./_shared/gemini.js";
 import { postTweet } from "./_shared/twitter.js";
 import { sendTelegramMessage } from "./_shared/telegram.js";
-import { fetchRecentDevLogs, popXStockDraft } from "./_shared/notion.js";
+import { fetchRecentDevLogs, fetchRecentPostedTexts, savePostedText, popXStockDraft } from "./_shared/notion.js";
 
 // ─── タイムゾーンヘルパー ───
 function getTodayJST() {
@@ -59,19 +59,41 @@ function formatDevContext(logs) {
     .join("\n\n");
 }
 
+// ─── 曜日ごとの切り口ローテーション ───
+const ANGLE_BY_DAY = {
+  0: { label: "個人開発のリアル", desc: "モチベーション、時間管理、失敗談、個人開発ならではの苦労や楽しさ" },
+  1: { label: "今日やった作業の具体的な内容・結果", desc: "「〜を実装した」「〜を修正した」のように、具体的に何をしたか" },
+  2: { label: "試行錯誤のエピソード", desc: "「〜を入れたけど微妙だったから消した」「3時間ハマった」のような泥臭い話" },
+  3: { label: "仕組みづくりの話", desc: "自動化、Notion連携、Claude活用、CI/CDなど、開発環境・ワークフローの工夫" },
+  4: { label: "技術選定の裏話", desc: "「〜を選んだ理由」「〜は合わなかった」のように、なぜその技術を使ったか" },
+  5: { label: "開発で学んだこと・気づき", desc: "開発を通じて得た知見、意外だったこと、考え方の変化" },
+  6: { label: "AI活用の具体例", desc: "「AIに〜させたら〜だった」のように、AIをどう使ってどうなったか" },
+};
+
+function getTodayAngle() {
+  const dow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" })).getDay();
+  return ANGLE_BY_DAY[dow];
+}
+
 // ─── AI で投稿文を生成 ───
 async function generateXPost() {
   const todayJST = getTodayJST();
   const dayOfWeek = getDayOfWeekJST();
+  const angle = getTodayAngle();
 
-  // Notion から直近の開発ログを取得
+  // Notion から直近の開発ログ + 投稿済みテキストを取得
   let devContext = null;
   let recentDrafts = [];
+  let postedTexts = [];
   try {
-    const logs = await fetchRecentDevLogs(3);
+    const [logs, posted] = await Promise.all([
+      fetchRecentDevLogs(7),
+      fetchRecentPostedTexts(7),
+    ]);
     devContext = formatDevContext(logs);
     recentDrafts = logs.map((l) => l.draft).filter(Boolean);
-    console.log(`[post-x] 開発ログ ${logs.length} 件取得`);
+    postedTexts = posted;
+    console.log(`[post-x] 開発ログ ${logs.length} 件、投稿済み ${posted.length} 件取得`);
   } catch (err) {
     console.warn("[post-x] 開発ログ取得失敗（フォールバック）:", err.message);
   }
@@ -85,19 +107,17 @@ ${devContext ? `═══ 直近の開発内容（これが最も重要な素材
 ${devContext}
 ═══════════════════════════════════════` : "（開発ログの取得に失敗しました。一般的な個人開発の話題で書いてください）"}
 
-${recentDrafts.length > 0 ? `═══ 過去の投稿下書き（これらと似た内容は避けること）═══
-${recentDrafts.map((d, i) => `${i + 1}. ${d}`).join("\n")}
-═══════════════════════════════════════` : ""}
+${(() => {
+    const allPast = [...new Set([...postedTexts, ...recentDrafts])];
+    if (allPast.length === 0) return "";
+    return `═══ 過去の投稿（これらと似た内容・構成・切り口は絶対に避けること）═══
+${allPast.map((d, i) => `${i + 1}. ${d}`).join("\n")}
+═══════════════════════════════════════`;
+  })()}
 
-【投稿の方向性 — 以下の切り口からランダムに選ぶこと】
-- 今日やった作業の具体的な内容・結果（「〜を実装した」「〜を修正した」）
-- 試行錯誤のエピソード（「〜を入れたけど微妙だったから消した」「3時間ハマった」）
-- 仕組みづくりの話（自動化、Notion連携、Claude活用、CI/CDなど）
-- 技術選定の裏話（「〜を選んだ理由」「〜は合わなかった」）
-- 開発で学んだこと・気づき
-- ユーザー目線での体験の変化（「この機能で〜が楽になった」）
-- 個人開発のリアル（モチベ、時間管理、失敗談）
-- AI活用の具体例（「AIに〜させたら〜だった」）
+【今日の投稿の切り口（これに従うこと。他の切り口にしない）】
+テーマ: ${angle.label}
+説明: ${angle.desc}
 
 【最重要ルール — 具体性】
 - 上の「直近の開発内容」から具体的な技術名・機能名・数字を必ず1つ以上使え（例：Wikipedia、Notion、Telegram、Groq、2000行、17ファイルなど）
@@ -254,9 +274,16 @@ export default async function handler(req, res) {
   // X に投稿
   const result = await postTweet(postText);
 
-  // Telegram に結果を通知
+  // 投稿成功時: Notionに投稿済みテキストを保存 + Telegram通知
   const sourceLabel = source === "stock" ? "📦ストック" : source === "custom" ? "✏️カスタム" : "🤖AI生成";
   if (result.ok) {
+    // 投稿済みテキストをNotionに書き戻し（次回以降の重複回避に使用）
+    try {
+      await savePostedText(postText);
+      console.log("[post-x] 投稿済みテキストをNotionに保存");
+    } catch (saveErr) {
+      console.warn("[post-x] 投稿済みテキスト保存失敗:", saveErr.message);
+    }
     await sendTelegramMessage(
       `✅ X自動投稿完了（${sourceLabel}）\n\n${postText}\n\nhttps://x.com/i/status/${result.tweetId}`
     );

@@ -102,6 +102,60 @@ export async function popXStockDraft(consume = true) {
 }
 
 /**
+ * 直近の投稿済みテキスト一覧を取得（重複回避用）
+ * 開発ログDBの「投稿済みテキスト」フィールドから取得
+ * @param {number} limit 取得件数（デフォルト7）
+ * @returns {string[]} 投稿済みテキストの配列
+ */
+export async function fetchRecentPostedTexts(limit = 7) {
+  const res = await fetch(`${NOTION_API}/databases/${DEV_LOG_DB_ID}/query`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      sorts: [{ property: "日付", direction: "descending" }],
+      page_size: limit,
+    }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results
+    .map((page) => page.properties["投稿済みテキスト"]?.rich_text?.[0]?.plain_text || "")
+    .filter(Boolean);
+}
+
+/**
+ * 開発ログDBの直近エントリに投稿済みテキストを書き戻す
+ * @param {string} text 実際に投稿されたテキスト
+ */
+export async function savePostedText(text) {
+  // 直近1件を取得して、そこに書き込む
+  const res = await fetch(`${NOTION_API}/databases/${DEV_LOG_DB_ID}/query`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      sorts: [{ property: "日付", direction: "descending" }],
+      page_size: 1,
+    }),
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  if (data.results.length === 0) return;
+
+  const pageId = data.results[0].id;
+  await fetch(`${NOTION_API}/pages/${pageId}`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      properties: {
+        "投稿済みテキスト": {
+          rich_text: [{ text: { content: text.slice(0, 2000) } }],
+        },
+      },
+    }),
+  });
+}
+
+/**
  * CC Tools DBから既存エントリの名前一覧を取得（重複チェック用）
  * @returns {Set<string>} 既存ツール名のSet
  */
