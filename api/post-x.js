@@ -88,7 +88,7 @@ async function generateXPost() {
   try {
     const [logs, posted] = await Promise.all([
       fetchRecentDevLogs(7),
-      fetchRecentPostedTexts(7),
+      fetchRecentPostedTexts(14),
     ]);
     devContext = formatDevContext(logs);
     recentDrafts = logs.map((l) => l.draft).filter(Boolean);

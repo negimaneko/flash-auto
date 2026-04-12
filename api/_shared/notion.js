@@ -103,56 +103,51 @@ export async function popXStockDraft(consume = true) {
 
 /**
  * 直近の投稿済みテキスト一覧を取得（重複回避用）
- * 開発ログDBの「投稿済みテキスト」フィールドから取得
- * @param {number} limit 取得件数（デフォルト7）
+ * X投稿ストックDBの「使用済み」エントリから取得
+ * @param {number} limit 取得件数（デフォルト14）
  * @returns {string[]} 投稿済みテキストの配列
  */
-export async function fetchRecentPostedTexts(limit = 7) {
-  const res = await fetch(`${NOTION_API}/databases/${DEV_LOG_DB_ID}/query`, {
+export async function fetchRecentPostedTexts(limit = 14) {
+  const res = await fetch(`${NOTION_API}/databases/${X_STOCK_DB_ID}/query`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({
-      sorts: [{ property: "日付", direction: "descending" }],
+      filter: {
+        property: "ステータス",
+        select: { equals: "使用済み" },
+      },
+      sorts: [{ property: "作成日", direction: "descending" }],
       page_size: limit,
     }),
   });
   if (!res.ok) return [];
   const data = await res.json();
   return data.results
-    .map((page) => page.properties["投稿済みテキスト"]?.rich_text?.[0]?.plain_text || "")
+    .map((page) => page.properties["投稿文"]?.title?.[0]?.plain_text || "")
     .filter(Boolean);
 }
 
 /**
- * 開発ログDBの直近エントリに投稿済みテキストを書き戻す
+ * 投稿済みテキストをX投稿ストックDBに「使用済み」として追加する
+ * AI生成・カスタム投稿も含め、全投稿の履歴がストックDBに蓄積される
  * @param {string} text 実際に投稿されたテキスト
  */
 export async function savePostedText(text) {
-  // 直近1件を取得して、そこに書き込む
-  const res = await fetch(`${NOTION_API}/databases/${DEV_LOG_DB_ID}/query`, {
+  const res = await fetch(`${NOTION_API}/pages`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({
-      sorts: [{ property: "日付", direction: "descending" }],
-      page_size: 1,
-    }),
-  });
-  if (!res.ok) return;
-  const data = await res.json();
-  if (data.results.length === 0) return;
-
-  const pageId = data.results[0].id;
-  await fetch(`${NOTION_API}/pages/${pageId}`, {
-    method: "PATCH",
-    headers: getHeaders(),
-    body: JSON.stringify({
+      parent: { database_id: X_STOCK_DB_ID },
       properties: {
-        "投稿済みテキスト": {
-          rich_text: [{ text: { content: text.slice(0, 2000) } }],
-        },
+        "投稿文": { title: [{ text: { content: text.slice(0, 2000) } }] },
+        "ステータス": { select: { name: "使用済み" } },
       },
     }),
   });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Notion API エラー (${res.status}): ${body}`);
+  }
 }
 
 /**
