@@ -273,7 +273,13 @@ export default async function handler(req, res) {
 ■ 外部ユーザー累計: ${externalTotal}人`;
 
   if (isDryRun) {
-    return res.status(200).json({ ok: true, dryRun: true, report });
+    return res.status(200).json({ ok: true, dryRun: true, report, skipped: appOpenUniq === 0 });
+  }
+
+  // 外部ユーザーの訪問が0件なら送信スキップ
+  if (appOpenUniq === 0) {
+    console.log("[daily-report] 外部ユーザー訪問なし — 送信スキップ");
+    return res.status(200).json({ ok: true, skipped: true, reason: "no external visitors" });
   }
 
   // ─── グラフ送信 ───
