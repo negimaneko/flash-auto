@@ -11,74 +11,9 @@ jobs:
   send-telegram:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Telegram message
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Send via Vercel production API
         run: |
-          python3 << 'PYEOF'
-          import urllib.request, json, os
-
-          msg = """\U0001f50d コードレビュー報告（2026-06-05）
-
-【致命的】
-
-\U0001f4c1 api/notify-telegram.js:28-36
-⚠️ CRON_SECRET未設定時は認証を完全スキップ。?test=1クエリで誤れるTelegram送信が認証なしで可能。
-\U0001f4a1 CRON_SECRET未設定でもtest=1以外は401を返す、またはCRON_SECRET必須化。
-
-\U0001f4c1 api/post-x.js:38-44 / api/daily-report.js:33-39
-⚠️ 同様にCRON_SECRET未設定時は認証スキップ。本番で未設定のまま運用すると任意リクエストでX投稿・レポート送信が実行される。
-\U0001f4a1 CRON_SECRET未設定時は500を返すかバリデーション必須化。
-
-\U0001f4c1 vite.config.js（handleTrackProxy）
-⚠️ ローカル開発のCORSが Access-Control-Allow-Origin: * で本番制限と真逆。任意オリジンからtracking APIへ書き込み可能。
-\U0001f4a1 本番同様に localhost:5173 のみ許可する。
-
-【改善推奨】
-
-\U0001f4c1 api/deck-cache.js:632-684（consumeCredit）
-⚠️ readCredits→upsertの2ステップに競合状態。並列リクエストでクレジットを二重消費する可能性。
-\U0001f4a1 Supabase RPCでアトミックインクリメントに変更。
-
-\U0001f4c1 api/daily-report.js:140-148
-⚠️ eventsをLIMIT(5000)全取得後JSフィルタ。ユーザー増加時に5000件超でデータ欠落。
-\U0001f4a1 .gte(\"occurred_at\", todayStart)をSupabaseクエリに追加。
-
-\U0001f4c1 src/api.js:156-163（aiEval）
-⚠️ term・correctDef・userAnsをサニタイズなしでLLMプロンプトに埋め込み。悪意あるカードでプロンプトインジェクションが可能。
-\U0001f4a1 埋め込み前に200文字にsliceするか構造化出力を使う。
-
-\U0001f4c1 api/public-library.js:116（handlePublish）
-⚠️ source_deck_idがnullの場合、upsertのonConflict照合が機能せずINSERTが重複実行される可能性。
-\U0001f4a1 source_deck_idがnullの場合は別ロジックで処理。
-
-【軽微】
-
-\U0001f4c1 vite.config.js（parseDeckPayload）
-⚠️ api/deck-cache.jsと同等の関数が重複実装。こちらは古いバージョン（<think>除去なし）。
-
-\U0001f4c1 src/App.jsx:327
-⚠️ window.confirm()による削除確認。モバイルブラウザでブロックされる場合がある。
-
-\U0001f4c1 api/daily-report.js:225
-⚠️ Google SheetsのスプレッドシートIDがハードコード。URL変更時に気づきにくい。
-
----
-\U0001f4ca 分析ファイル数: 30件"""
-
-          bot_token = os.environ.get('BOT_TOKEN', '')
-          chat_id = os.environ.get('CHAT_ID', '')
-
-          if not bot_token or not chat_id:
-              print('ERROR: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret not set')
-              exit(1)
-
-          url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-          data = json.dumps({'chat_id': chat_id, 'text': msg}).encode('utf-8')
-
-          req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-          with urllib.request.urlopen(req) as resp:
-              result = json.loads(resp.read())
-              print('Sent! message_id:', result.get('result', {}).get('message_id'))
-          PYEOF
+          curl -s -X POST 'https://flashauto.vercel.app/api/notify-telegram?test=1' \
+            -H 'Content-Type: application/json' \
+            -d '{"message": "🔍 コードレビュー報告（2026-06-05）\n\n【致命的】\n\n1. api/notify-telegram.js:28-36\nCRON_SECRET未設定時は認証を完全スキップ。?test=1クエリでTelegram送信が認証なしで可能。対策: CRON_SECRET未設定時は500を返すか必須化。\n\n2. api/post-x.js:38-44 / api/daily-report.js:33-39\n同様にCRON_SECRET未設定時は認証スキップ。本番で未設定のまま運用すると任意リクエストでX投稿・レポート送信が実行される。対策: 同上。\n\n3. vite.config.js (handleTrackProxy)\nローカル開発のCORSが Access-Control-Allow-Origin: * で本番制限と真逆。対策: localhost:5173 のみ許可する。\n\n【改善推奨】\n\n4. api/deck-cache.js:632-684 (consumeCredit)\n競合状態でクレジット二重消費の可能性。対策: Supabase RPCでアトミック処理に変更。\n\n5. api/daily-report.js:140-148\neventsをLIMIT(5000)全取得後かJSフィルタ。5000件超でデータ欠落。対策: .gte(occurred_at, todayStart)をSupabaseクエリに追加。\n\n6. src/api.js:156-163 (aiEval)\nプロンプトインジェクションリスク。対策: 埋め込み前に200文字にslice。\n\n7. api/public-library.js:116\nsource_deck_idがnull時にupsertはonConflictの照合が機能せずNULL!=NULLで重複INSERT可能性。\n\n【軽微】\n\n8. vite.config.js (parseDeckPayload)\napi/deck-cache.jsと同等の関数が重複実装。古いバージョン（<think>除去なし）。\n\n9. src/App.jsx:327\nwindow.confirm()による削除確認。モバイルブラウザでブロックされる場合がある。\n\n10. api/daily-report.js:225\nGoogle Sheets IDがハードコード。\n\n---\n📊 分析ファイル数: 30件"}'
+          echo "Exit code: $?"
