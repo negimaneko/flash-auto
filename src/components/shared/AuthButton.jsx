@@ -1,7 +1,20 @@
 import { LogIn, LogOut } from "lucide-react";
 
 export function AuthButton({ user, onLogin, onLogout, supabaseReady }) {
-  if (!supabaseReady) return null;
+  // Supabase未設定時：機能を丸ごと隠すと「デプロイ漏れ」と区別がつかないため、
+  // 無効状態のボタンを出して原因（設定側）が分かるようにする。
+  if (!supabaseReady) {
+    return (
+      <button
+        className="nbtn ghost"
+        disabled
+        title="ログイン機能は現在利用できません（サーバー設定を確認中）"
+        style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.5, cursor: "not-allowed" }}
+      >
+        <LogIn size={15} /> ログイン
+      </button>
+    );
+  }
 
   if (user) {
     const name = user.user_metadata?.full_name || user.email || "";
