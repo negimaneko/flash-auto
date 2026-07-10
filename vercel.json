@@ -4,15 +4,5 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
-  ],
-  "crons": [
-    {
-      "path": "/api/post-x",
-      "schedule": "17 3 * * *"
-    },
-    {
-      "path": "/api/daily-report",
-      "schedule": "53 13 * * *"
-    }
   ]
 }
