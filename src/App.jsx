@@ -48,6 +48,7 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState(null);
   // アカウント同期用（サーバーとの単語帳同期の状態管理）
   const decksRef = useRef(decks);
   decksRef.current = decks;
@@ -88,16 +89,42 @@ export default function App() {
     return () => clearTimeout(timerId);
   }, []);
 
-  // Supabase Auth セッション監視
+  // Supabase Auth セッション監視（OAuth戻りのハッシュトークンを明示的に処理）
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
+    let active = true;
+    (async () => {
+      // Googleログインから戻った直後：URLハッシュ #access_token=... でセッションを確立
+      try {
+        const hash = window.location.hash;
+        if (hash && hash.includes("access_token")) {
+          const p = new URLSearchParams(hash.slice(1));
+          const access_token = p.get("access_token");
+          const refresh_token = p.get("refresh_token");
+          if (access_token && refresh_token) {
+            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (error) {
+              console.error("[auth] setSession エラー:", error);
+              if (active) setAuthError(error.message || String(error));
+            } else if (active && data?.session) {
+              setUser(data.session.user);
+            }
+            // URLからトークンを消してきれいにする
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }
+        }
+      } catch (e) {
+        console.error("[auth] 初期化エラー:", e);
+        if (active) setAuthError(e?.message || String(e));
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (active) setUser((prev) => prev ?? session?.user ?? null);
+    })();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (active) setUser(session?.user ?? null);
     });
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   // ログイン時：サーバーの単語帳を読み込み、ローカル分を統合（アップロード）する
@@ -341,6 +368,12 @@ export default function App() {
 
   return (
     <div className="app">
+      {authError && (
+        <div style={{ background:"#b91c1c", color:"#fff", padding:"8px 12px", fontSize:13, textAlign:"center", cursor:"pointer" }}
+             onClick={() => setAuthError(null)} title="タップで閉じる">
+          ログインエラー: {authError}
+        </div>
+      )}
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
       <MobileDrawer open={menuOpen} onClose={()=>setMenuOpen(false)}
         onHome={()=>{goHome();setMenuOpen(false);}}
