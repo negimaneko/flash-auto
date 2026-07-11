@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import "./App.css";
 import { getAnonymousUserId, trackEvent, isNewUser } from "./lib/tracking.js";
 import { SPLASH_DURATION_MS } from "./constants.js";
@@ -6,6 +6,7 @@ import { SEED_DECKS } from "./data.js";
 import { normalizeDeck, normalizeDecks, uid } from "./utils.js";
 import { publishDeck, togglePublicFav } from "./api.js";
 import { supabase } from "./lib/supabase.js";
+import { fetchUserDecks, upsertUserDecks, deleteUserDecks, isSeedDeck } from "./lib/deckSync.js";
 
 import { ErrorBoundary } from "./components/shared/ErrorBoundary.jsx";
 import { SplashScreen } from "./components/shared/SplashScreen.jsx";
@@ -47,6 +48,11 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
+  // アカウント同期用（サーバーとの単語帳同期の状態管理）
+  const decksRef = useRef(decks);
+  decksRef.current = decks;
+  const syncReadyRef = useRef(false);      // 初回マージ完了後にサーバーへ書き込み開始
+  const syncedIdsRef = useRef(new Set());  // サーバー上にある deck_id（削除検知用）
   // 公開デッキのお気に入り管理（publicId の Set）
   const [publicFavIds, setPublicFavIds] = useState(() => {
     try {
@@ -93,6 +99,48 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // ログイン時：サーバーの単語帳を読み込み、ローカル分を統合（アップロード）する
+  useEffect(() => {
+    if (!supabase || !user) {
+      syncReadyRef.current = false;
+      syncedIdsRef.current = new Set();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const serverDecks = await fetchUserDecks(user.id);
+      if (cancelled) return;
+      const serverIds = new Set(serverDecks.map((d) => String(d.id)));
+      // ローカルにしか無い単語帳（サンプルは除く）をアカウントへ統合
+      const localOnly = decksRef.current.filter(
+        (d) => !serverIds.has(String(d.id)) && !isSeedDeck(d.id)
+      );
+      const merged = normalizeDecks([...serverDecks, ...localOnly]);
+      setDecks(merged);
+      syncedIdsRef.current = new Set(
+        merged.filter((d) => !isSeedDeck(d.id)).map((d) => String(d.id))
+      );
+      syncReadyRef.current = true;
+      if (localOnly.length) await upsertUserDecks(user.id, localOnly);
+    })().catch((e) => console.error("[deckSync] 初回同期エラー:", e));
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // ログイン中に単語帳が変わったら、サーバーへ反映（作成・更新・削除）
+  useEffect(() => {
+    if (!supabase || !user || !syncReadyRef.current) return;
+    const timerId = setTimeout(() => {
+      const currentIds = new Set(
+        decks.filter((d) => !isSeedDeck(d.id)).map((d) => String(d.id))
+      );
+      const removed = [...syncedIdsRef.current].filter((id) => !currentIds.has(id));
+      upsertUserDecks(user.id, decks);
+      if (removed.length) deleteUserDecks(user.id, removed);
+      syncedIdsRef.current = currentIds;
+    }, 800);
+    return () => clearTimeout(timerId);
+  }, [decks, user]);
 
   useEffect(() => {
     try {
