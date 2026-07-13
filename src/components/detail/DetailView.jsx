@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { Navbar } from "../shared/Navbar.jsx";
 import { uid, getLangLabel } from "../../utils.js";
 import { aiSuggest } from "../../api.js";
@@ -29,7 +29,8 @@ function exportDeck(deck) {
   URL.revokeObjectURL(url);
 }
 
-export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdateCard,onAddCard,onDeleteCard,showToast}) {
+export function DetailView({deck,canManage,onBack,onStartMode,onToggleFav,onEdit,onDelete,onUpdateCard,onAddCard,onDeleteCard,showToast}) {
+  const [menuOpen,setMenuOpen]=useState(false);
   const [editingId,setEditingId]=useState(null);
   const [editWord,setEditWord]=useState("");
   const [editDef,setEditDef]=useState("");
@@ -155,8 +156,28 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
             <button className={"nbtn fav-heart-btn"+(deck.favorited?" fav-on":"")} onClick={onToggleFav} title={deck.favorited?"保存済み":"保存"}><svg width="24" height="24" viewBox="0 0 24 24" fill={deck.favorited?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
             <button className="nbtn" onClick={() => { exportDeck(deck); showToast("エクスポートしました"); }}>エクスポート</button>
-            {!deck.isPublic && <button className="nbtn" onClick={onEdit}>単語帳編集</button>}
-            {!deck.isPublic && <button className="nbtn danger" onClick={onDelete}>削除</button>}
+            {canManage && (
+              <div className="deck-menu-wrap">
+                <button className="nbtn ghost deck-menu-btn" onClick={()=>setMenuOpen(v=>!v)} aria-label="その他のメニュー" aria-expanded={menuOpen}>
+                  <MoreHorizontal size={20} />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="deck-menu-overlay" onClick={()=>setMenuOpen(false)} />
+                    <div className="deck-menu" role="menu">
+                      <button className="deck-menu-item" role="menuitem" onClick={()=>{setMenuOpen(false);onEdit();}}>
+                        <Pencil size={16} />
+                        <span>単語帳を編集する</span>
+                      </button>
+                      <button className="deck-menu-item danger" role="menuitem" onClick={()=>{setMenuOpen(false);onDelete();}}>
+                        <Trash2 size={16} />
+                        <span>単語帳を削除</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       />
@@ -315,7 +336,7 @@ export function DetailView({deck,onBack,onStartMode,onToggleFav,onEdit,onDelete,
                       <span className="term-label">定義</span>
                       <div className="term-value">{card.definition}</div>
                     </div>
-                    {!deck.isPublic && (
+                    {canManage && (
                     <div className="term-actions">
                       <button className="nbtn ghost icon-btn" onClick={()=>startEdit(card)} title="編集"><Pencil size={16} /></button>
                       <button className="nbtn danger icon-btn" onClick={()=>removeCard(card)} title="削除"><Trash2 size={16} /></button>

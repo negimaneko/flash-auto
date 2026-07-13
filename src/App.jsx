@@ -402,6 +402,7 @@ export default function App() {
       {view==="generate"  && <GenerateView onSave={saveGeneratedDeck} onBack={goHome} showToast={showToast}/>}
       {view==="create"    && <CreateView initial={editDeck} onSave={saveDeck} onBack={goHome} showToast={showToast}/>}
       {view==="detail"    && activeDeck && <DetailView deck={syncActive(activeDeck.id)} onBack={goHome}
+                               canManage={decks.some(d=>d.id===activeDeck.id)}
                                onStartMode={startMode}
                                onToggleFav={()=>activeDeck.isPublic ? togglePublicFavorite(activeDeck) : toggleFavorite(activeDeck.id)}
                                onEdit={()=>{setEditDeck(syncActive(activeDeck.id));setView("create");}}
