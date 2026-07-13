@@ -189,6 +189,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--ff);min-heigh
 .fav-heart-btn:hover{color:var(--coral);}
 .fav-heart-btn.fav-on{color:var(--coral);}
 .fav-count{font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.42);border-radius:10px;padding:1px 7px;text-align:center;}
+.deck-menu-wrap{position:relative;display:inline-flex;}
+.deck-menu-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px;}
+.deck-menu-overlay{position:fixed;inset:0;z-index:500;background:transparent;}
+.deck-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:600;min-width:210px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);box-shadow:var(--shadow-lg);padding:6px;display:flex;flex-direction:column;gap:2px;}
+.deck-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border:none;background:none;border-radius:8px;font-family:var(--ff);font-size:14px;font-weight:600;color:var(--text);cursor:pointer;text-align:left;transition:background .15s;}
+.deck-menu-item:hover{background:var(--surface2);}
+.deck-menu-item.danger{color:var(--red);}
+.deck-menu-item.danger:hover{background:var(--red-dim);}
 .crown-badge,.ai-badge{font-size:14px;background:rgba(255,255,255,.85);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
 .ai-badge{font-size:10px;font-weight:800;color:var(--accent);background:rgba(255,255,255,.9);border-radius:8px;width:auto;padding:2px 7px;border-radius:8px;}
 .deck-tile-body{padding:14px 16px;}
