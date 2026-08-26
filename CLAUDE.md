@@ -101,5 +101,35 @@ scripts/          # ユーティリティスクリプト
 - 提案形式：「CC Toolsに〇〇があります。△△に使えそうですが、見てみますか？」
 - CC Tools DBにツールを登録する際は「対応環境」列を必ず設定する（CLI / デスクトップ / 両方 / 不明）
 
+## X自動投稿・通知の構成
+
+### 自動投稿（Vercel Cron）
+- **実行時刻**: 毎日 12:17 JST（03:17 UTC）
+- **API**: `/api/post-x`
+- **処理フロー**: Notion開発ログ取得 → 実際の作業内容をもとにAI投稿文生成 → X投稿 → Telegram通知
+- **データソース**: Notion開発ログDB（直近3件のサマリー・コミット情報を取得）
+- **AI**: Groq → Gemini のフォールバック構成
+- **投稿結果**: Telegramに成功/失敗を通知
+- **投稿の方向性**: プロダクト宣伝ではなく、開発日記・裏話・試行錯誤のリアルな独り言
+- **投稿内容のルール**: `~/.claude/docs/X運用ルール.md` を参照
+
+### テスト・確認方法
+- Dry-run（投稿せず内容確認）: `POST /api/post-x?dry=1`
+- テスト送信: `POST /api/post-x?test=1`
+
+### 開発ログ → X下書き → Telegram通知（リモートトリガー）
+- **トリガー名**: daily-dev-log-and-notify
+- **実行時刻**: 毎日 23:50 JST
+- **処理フロー**: gitログ取得 → コミットがあればログ＋X下書き生成 → Notionに保存 → Telegramに下書きを通知
+- **Notion DB**: 「開発ログ」（ワークスペース最上位）
+
+### X自動投稿用の環境変数（Vercel）
+| 変数名 | 用途 |
+|--------|------|
+| `X_API_KEY` | X API Key |
+| `X_API_KEY_SECRET` | X API Key Secret |
+| `X_ACCESS_TOKEN` | X Access Token |
+| `X_ACCESS_TOKEN_SECRET` | X Access Token Secret |
+
 ## 禁止事項
 - アプリの表示・UI・コード上のあらゆる場所に「Quizlet」という名前を一切使用するな
